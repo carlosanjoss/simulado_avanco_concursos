@@ -8,14 +8,14 @@ export const redis = new Redis({
 
 export const ipRateLimit = new Ratelimit({
   redis,
-  limiter: Ratelimit.slidingWindow(20, '1 m'),
+  limiter: Ratelimit.slidingWindow(100, '1 m'),
   analytics: true,
   prefix: 'ratelimit:ip',
 });
 
 export const pdfRateLimit = new Ratelimit({
   redis,
-  limiter: Ratelimit.slidingWindow(5, '5 m'),
+  limiter: Ratelimit.slidingWindow(50, '5 m'),
   analytics: true,
   prefix: 'ratelimit:pdf',
 });
