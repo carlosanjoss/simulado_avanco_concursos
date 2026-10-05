@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { MONTHLY_QUIZ_LIMIT, getMonthlyUsage } from '@/lib/usage-limit';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ success: false, code: 'UNAUTHORIZED' }, { status: 401 });

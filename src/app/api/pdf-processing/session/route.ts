@@ -10,6 +10,7 @@ import {
 import { isSupabaseVectorConfigured } from '@/lib/supabase-admin';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 const sessionSchema = z.object({
   fileName: z.string().trim().min(1).max(255),

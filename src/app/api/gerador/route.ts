@@ -28,6 +28,7 @@ import type { Question } from '@/types/quiz';
 
 const MAX_FOCUS_LENGTH = 500;
 export const maxDuration = 300;
+export const dynamic = 'force-dynamic';
 
 type ErrorCode =
   | 'UNAUTHORIZED' | 'INVALID_FILE' | 'FILE_TOO_LARGE' | 'EMPTY_PDF'

@@ -12,6 +12,7 @@ import { isSupabaseVectorConfigured } from '@/lib/supabase-admin';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
+export const dynamic = 'force-dynamic';
 
 const pageSchema = z.object({
   pageNumber: z.number().int().min(1).max(400),

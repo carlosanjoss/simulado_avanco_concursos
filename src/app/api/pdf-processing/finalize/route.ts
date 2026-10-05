@@ -5,6 +5,7 @@ import { finalizeVectorDocument, getVectorDocument } from '@/lib/document-vector
 import { isSupabaseVectorConfigured } from '@/lib/supabase-admin';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 const finalizeSchema = z.object({ documentId: z.string().uuid() }).strict();
 

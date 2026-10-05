@@ -5,6 +5,8 @@ import { evaluateAnswer } from '@/lib/quiz-evaluation';
 import { attemptSubmissionSchema } from '@/lib/validations/attempt';
 import type { Question } from '@/types/quiz';
 
+export const dynamic = 'force-dynamic';
+
 function parseAnswers(value: string | null): Record<string, string> {
   if (!value) return {};
   try {

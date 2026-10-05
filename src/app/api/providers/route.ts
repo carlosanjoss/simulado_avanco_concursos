@@ -3,6 +3,8 @@ import { auth } from '@clerk/nextjs/server';
 import { getProviderConfiguration } from '@/lib/ai-providers';
 import { checkSupabaseVectorConnection, getSupabaseVectorAuthMode } from '@/lib/supabase-admin';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const { userId } = await auth();
   if (!userId) {

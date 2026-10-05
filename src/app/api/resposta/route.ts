@@ -5,6 +5,8 @@ import { evaluateAnswer } from '@/lib/quiz-evaluation';
 import type { Question } from '@/types/quiz';
 import { answerSubmissionSchema } from '@/lib/validations/attempt';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   const { userId: clerkId } = await auth();
   if (!clerkId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
