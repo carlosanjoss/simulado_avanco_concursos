@@ -1,25 +1,76 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getProviderConfiguration } from '@/lib/ai-providers';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  const checks = {
+    database: false,
+    supabase: false,
+    clerk: false,
+    openrouter: false,
+  };
+
+  const errors: Record<string, string> = {};
+
+  // Test database connection
   try {
-    // Test database connection
     await prisma.$queryRaw`SELECT 1`;
-    
-    return NextResponse.json({
-      status: 'healthy',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      database: 'connected',
-    });
+    checks.database = true;
   } catch (error) {
-    return NextResponse.json({
-      status: 'unhealthy',
-      timestamp: new Date().toISOString(),
-      database: 'disconnected',
-      error: error instanceof Error ? error.message : 'Unknown error',
-    }, { status: 503 });
+    errors.database = error instanceof Error ? error.message : 'Unknown error';
   }
+
+  // Test Supabase connection
+  try {
+    const supabase = await import('@/lib/supabase-admin').then(m => m.getSupabaseAdmin());
+    if (supabase) {
+      const { error } = await supabase.from('simulado_documents').select('id').limit(1);
+      if (!error) {
+        checks.supabase = true;
+      } else {
+        errors.supabase = error.message;
+      }
+    }
+  } catch (error) {
+    errors.supabase = error instanceof Error ? error.message : 'Unknown error';
+  }
+
+  // Test Clerk (check if keys are configured)
+  try {
+    const clerkPubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+    const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+    if (clerkPubKey && clerkSecretKey && !clerkPubKey.includes('SUA_CHAVE')) {
+      checks.clerk = true;
+    } else {
+      errors.clerk = 'Keys not configured';
+    }
+  } catch (error) {
+    errors.clerk = error instanceof Error ? error.message : 'Unknown error';
+  }
+
+  // Test OpenRouter
+  try {
+    const providers = getProviderConfiguration();
+    const openrouter = providers.find(p => p.id === 'openrouter');
+    if (openrouter?.configured) {
+      checks.openrouter = true;
+    } else {
+      errors.openrouter = 'API key not configured';
+    }
+  } catch (error) {
+    errors.openrouter = error instanceof Error ? error.message : 'Unknown error';
+  }
+
+  const allHealthy = Object.values(checks).every(v => v);
+
+  return NextResponse.json({
+    status: allHealthy ? 'healthy' : 'degraded',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    checks,
+    errors: Object.keys(errors).length > 0 ? errors : undefined,
+  }, { status: allHealthy ? 200 : 503 });
 }

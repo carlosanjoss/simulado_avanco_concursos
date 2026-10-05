@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { generateQuizBatchWithFallback, TOTAL_BATCHES } from '@/lib/ai-providers';
 import { embedTexts, vectorizePdfText } from '@/lib/embeddings';
 import { extractTextFromPDF, validatePDFBuffer, validatePDFFile } from '@/lib/pdf-utils';
@@ -16,7 +17,7 @@ import {
   QUESTION_GENERATION_ATTEMPTS,
   QUESTION_GENERATION_CONCURRENCY,
 } from '@/lib/question-generation';
-import { checkIpRateLimit, getClientIp } from '@/lib/rate-limit';
+import { checkIpRateLimit, checkGenerationRateLimit, getClientIp } from '@/lib/rate-limit';
 import { releaseMonthlyGeneration, reserveMonthlyGeneration } from '@/lib/usage-limit';
 import {
   getDocumentQuestionContexts,
@@ -85,8 +86,11 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
   const { userId: clerkUserId } = await auth();
   if (!clerkUserId) return errorResponse('UNAUTHORIZED', 'Faça login para gerar um simulado.', 401);
 
-  const ipLimit = checkIpRateLimit(getClientIp(request));
+  const ipLimit = await checkIpRateLimit(getClientIp(request));
   if (!ipLimit.allowed) return errorResponse('AI_UNAVAILABLE', 'Muitas solicitações. Tente novamente mais tarde.', 429);
+
+  const genLimit = await checkGenerationRateLimit(getClientIp(request));
+  if (!genLimit.allowed) return errorResponse('AI_UNAVAILABLE', 'Limite de geração excedido. Tente novamente mais tarde.', 429);
 
   let internalUserId: string | undefined;
   let usageReserved = false;
@@ -323,6 +327,7 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
     if (usageReserved && internalUserId) await releaseMonthlyGeneration(internalUserId, userEmail);
     const message = error instanceof Error ? error.message : 'INTERNAL_ERROR';
     console.error('[GERADOR ERROR]', { message, stack: error instanceof Error ? error.stack : undefined, clerkUserId });
+    Sentry.captureException(error);
     await audit({ userId: clerkUserId, status: 'error', durationMs: Date.now() - startedAt, errorMessage: message });
 
     if (message === 'EMPTY_PDF') return errorResponse('EMPTY_PDF', 'Não conseguimos extrair texto suficiente desse PDF.', 400);

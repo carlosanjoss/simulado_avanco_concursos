@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+import * as Sentry from '@sentry/nextjs';
 
 const isPublicRoute = createRouteMatcher([
   '/',
@@ -22,3 +23,5 @@ export const config = {
     '/(api|trpc)(.*)',
   ],
 };
+
+export const onError = Sentry.captureException;
