@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   if (!isSupabaseVectorConfigured()) {
     return NextResponse.json({ error: 'Processamento em lotes não configurado' }, { status: 503 });
   }
-  const ipLimit = checkPdfBatchRateLimit(getClientIp(request));
+  const ipLimit = await checkPdfBatchRateLimit(getClientIp(request));
   if (!ipLimit.allowed) return NextResponse.json({ error: 'Muitas solicitações.' }, { status: 429 });
 
   const parsed = batchSchema.safeParse(await request.json().catch(() => null));
