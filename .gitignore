@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+.cache/
+
+# environment and secrets
+.env
+.env.local
+.env.*.local
+
+# local databases and logs
+prisma/*.db
+prisma/*.db-journal
+prisma/*.db-wal
+prisma/*.db-shm
+.migration-data/
+coverage/
+*.log
+
+# editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+public/pdf.worker.min.mjs

@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String             @id @default(cuid())
+  clerkId      String             @unique
+  email        String
+  name         String?
+  imageUrl     String?
+  isAdmin      Boolean            @default(false)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  simulados    Simulado[]
+  monthlyUsage MonthlyUsage[]
+  tentativas   Tentativa[]
+  feedbacks    QuestionFeedback[]
+}
+
+model MonthlyUsage {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  monthKey  String
+  count     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, monthKey])
+  @@index([userId, monthKey])
+}
+
+model Simulado {
+  id            String             @id @default(cuid())
+  userId        String
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  titulo        String
+  totalQuestoes Int                @default(30)
+  temasFoco     String?
+  pdfNome       String
+  pdfHash       String
+  questoesJson  String
+  status        String             @default("NAO_INICIADO")
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  tentativas    Tentativa[]
+  feedbacks     QuestionFeedback[]
+  deletedAt     DateTime?
+
+  @@index([userId, pdfHash])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([pdfHash])
+}
+
+model Tentativa {
+  id              String    @id @default(cuid())
+  activeKey       String?   @unique
+  simuladoId      String
+  simulado        Simulado  @relation(fields: [simuladoId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  respostas       String
+  pontuacao       Int
+  totalQuestoes   Int
+  percentual      Float
+  currentIndex    Int       @default(0)
+  selectedAnswers String?
+  concluidoEm     DateTime?
+  durationSeconds Int?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([simuladoId])
+  @@index([userId])
+  @@index([concluidoEm])
+}
+
+model AuditLog {
+  id              String   @id @default(cuid())
+  userId          String?
+  action          String
+  provider        String?
+  durationMs      Int?
+  tokensEstimated Int?
+  status          String
+  errorMessage    String?
+  metadata        String?
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model QuestionFeedback {
+  id         String   @id @default(cuid())
+  simuladoId String
+  questaoId  Int
+  userId     String
+  type       String
+  message    String?
+  createdAt  DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  simulado Simulado @relation(fields: [simuladoId], references: [id], onDelete: Cascade)
+
+  @@index([simuladoId, questaoId])
+}
