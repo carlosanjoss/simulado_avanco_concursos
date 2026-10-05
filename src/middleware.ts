@@ -8,6 +8,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/webhook(.*)',
   '/api/providers',
   '/api/admin/feedbacks',
+  '/api/health',
   '/pdf.worker.min.mjs',
 ]);
 
