@@ -4,6 +4,8 @@ import { redirect, notFound } from 'next/navigation';
 import SimuladoClient from './SimuladoClient';
 import type { PublicQuestion, Question } from '@/types/quiz';
 
+export const dynamic = 'force-dynamic';
+
 interface SimuladoClientData {
   id: string;
   titulo: string;
