@@ -33,3 +33,5 @@ export async function checkGenerationRateLimit(ip: string) {
     resetAt: result.reset,
   };
 }
+
+export { getClientIp } from '@/lib/rate-limit-redis';
