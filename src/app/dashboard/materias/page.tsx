@@ -6,6 +6,8 @@ import DashboardShell from '@/components/dashboard/DashboardShell';
 import { prisma } from '@/lib/prisma';
 import type { Question } from '@/types/quiz';
 
+export const dynamic = 'force-dynamic';
+
 export default async function MateriasPage() {
   const { userId } = await auth();
   if (!userId) redirect('/sign-in');

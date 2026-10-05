@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma';
 import DashboardClient from './DashboardClient';
 import { getMonthlyUsage, MONTHLY_QUIZ_LIMIT } from '@/lib/usage-limit';
 
+export const dynamic = 'force-dynamic';
+
 export default async function DashboardPage() {
   const { userId } = await auth();
 

@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma';
 import type { Question } from '@/types/quiz';
 import QuestionBankClient from './QuestionBankClient';
 
+export const dynamic = 'force-dynamic';
+
 export default async function QuestionBankPage() {
   const { userId } = await auth();
   if (!userId) redirect('/sign-in');

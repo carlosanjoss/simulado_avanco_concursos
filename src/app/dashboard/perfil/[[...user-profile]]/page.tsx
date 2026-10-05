@@ -1,6 +1,8 @@
 import { UserProfile } from '@clerk/nextjs';
 import DashboardShell from '@/components/dashboard/DashboardShell';
 
+export const dynamic = 'force-dynamic';
+
 export default function ProfilePage() {
   return (
     <DashboardShell>

@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma';
 import type { Question } from '@/types/quiz';
 import StudyPlanClient from './StudyPlanClient';
 
+export const dynamic = 'force-dynamic';
+
 export default async function StudyPlansPage() {
   const { userId } = await auth();
   if (!userId) redirect('/sign-in');
