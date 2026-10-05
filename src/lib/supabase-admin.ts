@@ -33,6 +33,11 @@ export function isSupabaseVectorConfigured(): boolean {
 }
 
 export async function getSupabaseAdmin(): Promise<SupabaseClient> {
+  // Skip during build
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    return null as any;
+  }
+
   const url = supabaseUrl();
   if (!url) throw new Error('SUPABASE_NOT_CONFIGURED');
 
