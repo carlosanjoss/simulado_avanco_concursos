@@ -6,6 +6,11 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
+    // Skip auth during build time
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      return NextResponse.json({ feedbacks: [] });
+    }
+
     const { userId: clerkId } = await auth();
 
     if (!clerkId) {
