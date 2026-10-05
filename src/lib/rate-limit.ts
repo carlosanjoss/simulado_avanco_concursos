@@ -33,11 +33,3 @@ export async function checkGenerationRateLimit(ip: string) {
     resetAt: result.reset,
   };
 }
-
-export function getClientIp(request: NextRequest): string {
-  const forwarded = request.headers.get('x-forwarded-for');
-  const realIp = request.headers.get('x-real-ip');
-  const cfConnectingIp = request.headers.get('cf-connecting-ip');
-
-  return cfConnectingIp || realIp || forwarded?.split(',')[0]?.trim() || 'unknown';
-}
