@@ -1,15 +1,12 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
-import { ClerkProviders } from '@/components/providers';
+import { AuthProvider } from '@/components/providers';
 import { Toaster } from 'sonner';
 import { ThemeProvider } from '@/components/theme-provider';
 
-const inter = Inter({ subsets: ['latin'] });
-
 export const metadata: Metadata = {
-  title: 'Simulado PDF Generator - Gere simulados interativos a partir de PDFs',
-  description: 'Transforme seus PDFs em simulados interativos com IA. 30 questões de múltipla escolha e feedback imediato.',
+  title: 'Avanço Simulados — Transforme seus PDFs em simulados com IA',
+  description: 'Envie seus materiais de estudo (PDF) e receba 30 questões de múltipla escolha personalizadas, com justificativas detalhadas e acompanhamento de desempenho.',
 };
 
 export default function RootLayout({
@@ -19,13 +16,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
-      <body className={inter.className}>
-        <ClerkProviders>
+      <body className="font-sans">
+        <AuthProvider>
           <ThemeProvider>
             {children}
             <Toaster position="top-right" />
           </ThemeProvider>
-        </ClerkProviders>
+        </AuthProvider>
       </body>
     </html>
   );

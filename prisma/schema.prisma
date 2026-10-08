@@ -10,17 +10,83 @@ datasource db {
 
 model User {
   id           String             @id @default(cuid())
-  clerkId      String             @unique
-  email        String
+  email        String             @unique
   name         String?
   imageUrl     String?
+  password     String?
   isAdmin      Boolean            @default(false)
+  accountStatus String             @default("ACTIVE")
+  tokenVersion  Int                @default(0)
+  lastLoginAt   DateTime?
+  emailVerifiedAt DateTime?
+  termsAcceptedAt DateTime?
+  legalVersion    String?
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
   simulados    Simulado[]
   monthlyUsage MonthlyUsage[]
   tentativas   Tentativa[]
   feedbacks    QuestionFeedback[]
+  authTokens   AuthToken[]
+  subscription Subscription?
+  paymentEvents PaymentEvent[]
+}
+
+model AuthToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose   String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, purpose])
+  @@index([expiresAt])
+}
+
+model Subscription {
+  id                     String    @id @default(cuid())
+  userId                 String    @unique
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider               String    @default("NUVEMSHOP")
+  planCode               String    @default("FREE")
+  status                 String    @default("PENDING")
+  billingInterval        String?
+  providerSubscriptionId String?   @unique
+  providerCustomerId     String?
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+  lastPaidAt             DateTime?
+  canceledAt             DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  @@index([status])
+  @@index([planCode])
+  @@index([currentPeriodEnd])
+}
+
+model PaymentEvent {
+  id              String    @id @default(cuid())
+  provider        String    @default("NUVEMSHOP")
+  eventKey        String    @unique
+  eventType       String
+  providerOrderId String?
+  userId          String?
+  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  status          String    @default("RECEIVED")
+  metadata        String?
+  errorMessage    String?
+  processedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([provider, eventType])
+  @@index([providerOrderId])
+  @@index([userId])
+  @@index([createdAt])
 }
 
 model MonthlyUsage {
@@ -112,4 +178,32 @@ model QuestionFeedback {
   simulado Simulado @relation(fields: [simuladoId], references: [id], onDelete: Cascade)
 
   @@index([simuladoId, questaoId])
+}
+
+model PendingInvite {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  token     String   @unique
+  name      String?
+  used      Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([token])
+}
+
+model AdminAuditLog {
+  id           String   @id @default(cuid())
+  actorUserId  String?
+  targetUserId String?
+  action       String
+  metadata     String?
+  createdAt    DateTime @default(now())
+
+  @@index([actorUserId])
+  @@index([targetUserId])
+  @@index([action])
+  @@index([createdAt])
 }

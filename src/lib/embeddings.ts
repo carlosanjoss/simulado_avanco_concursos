@@ -29,7 +29,6 @@ export interface VectorizedPdf {
 }
 
 declare global {
-  // eslint-disable-next-line no-var
   var miniLmExtractorPromise: Promise<FeatureExtractionPipeline> | undefined;
 }
 

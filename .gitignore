@@ -19,6 +19,9 @@ prisma/*.db-shm
 .migration-data/
 coverage/
 *.log
+backups/
+playwright-report/
+test-results/
 
 # editors and operating systems
 .vscode/

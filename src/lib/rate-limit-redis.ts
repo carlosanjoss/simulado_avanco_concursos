@@ -20,12 +20,7 @@ export const pdfRateLimit = new Ratelimit({
   prefix: 'ratelimit:pdf',
 });
 
-export const generationRateLimit = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(2, '1 h'),
-  analytics: true,
-  prefix: 'ratelimit:generation',
-});
+// Removido generationRateLimit baseado em IP - uso mensal é por usuário (usage-limit.ts)
 
 export async function checkRateLimit(
   limiter: Ratelimit,

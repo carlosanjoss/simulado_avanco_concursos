@@ -1,11 +1,11 @@
-'use client';
+'use client'
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useUser, UserButton } from '@clerk/nextjs';
-import { useState } from 'react';
-import { BarChart3, BookOpen, CalendarDays, FilePlus2, History, Home, LibraryBig, Menu, UserRound, X } from 'lucide-react';
-import { BrandLogo } from '@/components/shared/BrandLogo';
+import Link from 'next/link'
+import { usePathname, useRouter } from 'next/navigation'
+import { useAuth } from '@/components/providers'
+import { useState } from 'react'
+import { BarChart3, BookOpen, CalendarDays, CreditCard, FilePlus2, History, Home, LibraryBig, LogOut, Menu, ReceiptText, UserRound, Users, X } from 'lucide-react'
+import { BrandLogo } from '@/components/shared/BrandLogo'
 
 const navigation = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
@@ -15,28 +15,52 @@ const navigation = [
   { href: '/dashboard/materias', label: 'Matérias', icon: BookOpen },
   { href: '/dashboard/questoes', label: 'Banco de Questões', icon: LibraryBig },
   { href: '/dashboard/planos', label: 'Planos de Estudo', icon: CalendarDays },
+  { href: '/dashboard/assinatura', label: 'Minha assinatura', icon: CreditCard },
   { href: '/dashboard/perfil', label: 'Perfil', icon: UserRound },
-];
+]
 
 export default function DashboardShell({ children, focusMode = false }: { children: React.ReactNode; focusMode?: boolean }) {
-  const pathname = usePathname();
-  const { user } = useUser();
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const pathname = usePathname()
+  const router = useRouter()
+  const { user, isLoading, refresh } = useAuth()
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  const handleSignOut = async () => {
+    await fetch('/api/auth/signout', { method: 'POST' })
+    refresh()
+    router.push('/sign-in')
+    router.refresh()
+  }
 
   const isActive = (href: string) => {
-    if (href === '/dashboard') return pathname === '/dashboard';
-    const path = href.split('#')[0];
-    return path !== '/dashboard' && pathname.startsWith(path);
-  };
+    if (href === '/dashboard') return pathname === '/dashboard'
+    const path = href.split('#')[0]
+    return path !== '/dashboard' && pathname.startsWith(path)
+  }
 
-  const navigationLinks = navigation.map(({ href, label, icon: Icon }) => {
-    const active = isActive(href);
+  const visibleNavigation = user?.isAdmin
+    ? [...navigation, { href: '/dashboard/admin/usuarios', label: 'Gerenciar usuários', icon: Users }, { href: '/dashboard/admin/financeiro', label: 'Assinaturas', icon: ReceiptText }]
+    : navigation
+  const navigationLinks = visibleNavigation.map(({ href, label, icon: Icon }) => {
+    const active = isActive(href)
     return (
       <Link key={label} href={href} onClick={() => setMobileOpen(false)} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-colors ${active ? 'bg-blue-600 text-white shadow-lg shadow-blue-950/30' : 'text-blue-100 hover:bg-white/10 hover:text-white'}`}>
         <Icon className="w-5 h-5" />{label}
       </Link>
-    );
-  });
+    )
+  })
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#f5f8fd] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent" />
+      </div>
+    )
+  }
+
+  if (!user) {
+    return null
+  }
 
   if (focusMode) {
     return (
@@ -45,12 +69,14 @@ export default function DashboardShell({ children, focusMode = false }: { childr
           <Link href="/dashboard" aria-label="Voltar ao dashboard"><BrandLogo compact /></Link>
           <div className="flex items-center gap-3">
             <span className="hidden sm:inline-flex rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black uppercase tracking-[0.14em] text-blue-700">Modo simulado</span>
-            <UserButton afterSignOutUrl="/" />
+            <button onClick={handleSignOut} className="p-2 rounded-lg text-slate-700 hover:bg-slate-100" aria-label="Sair">
+              <LogOut className="w-5 h-5" />
+            </button>
           </div>
         </header>
         <main>{children}</main>
       </div>
-    );
+    )
   }
 
   return (
@@ -63,8 +89,13 @@ export default function DashboardShell({ children, focusMode = false }: { childr
           {navigationLinks}
         </nav>
         <div className="p-5 border-t border-white/10 flex items-center gap-3">
-          <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: 'w-10 h-10' } }} />
-          <div className="min-w-0"><p className="font-semibold text-sm truncate">{user?.firstName || 'Estudante'}</p><p className="text-xs text-blue-200 truncate">{user?.primaryEmailAddress?.emailAddress}</p></div>
+          <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-lg">
+            {user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-sm truncate">{user.name || 'Estudante'}</p>
+            <p className="text-xs text-blue-200 truncate">{user.email}</p>
+          </div>
         </div>
       </aside>
 
@@ -73,8 +104,10 @@ export default function DashboardShell({ children, focusMode = false }: { childr
           <div className="lg:hidden"><BrandLogo compact /></div>
           <div className="hidden lg:block text-sm text-slate-500">Sua preparação em outro nível</div>
           <div className="flex items-center gap-3">
-            <span className="hidden sm:block text-sm font-medium text-slate-700">{user?.firstName || 'Estudante'}</span>
-            <UserButton afterSignOutUrl="/" />
+            <span className="hidden sm:block text-sm font-medium text-slate-700">{user.name || 'Estudante'}</span>
+            <button onClick={handleSignOut} className="p-2 rounded-lg text-slate-700 hover:bg-slate-100" aria-label="Sair">
+              <LogOut className="w-5 h-5" />
+            </button>
             <button type="button" onClick={() => setMobileOpen(true)} className="lg:hidden p-2 rounded-lg text-slate-700 hover:bg-slate-100" aria-label="Abrir menu"><Menu className="w-5 h-5" /></button>
           </div>
         </header>
@@ -92,5 +125,5 @@ export default function DashboardShell({ children, focusMode = false }: { childr
         </div>}
       </div>
     </div>
-  );
+  )
 }

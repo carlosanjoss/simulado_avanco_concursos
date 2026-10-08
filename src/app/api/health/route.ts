@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getProviderConfiguration } from '@/lib/ai-providers';
+import { isEmailConfigured } from '@/lib/email';
+import { isNuvemshopConfigured } from '@/lib/nuvemshop';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,8 +10,11 @@ export async function GET() {
   const checks = {
     database: false,
     supabase: false,
-    clerk: false,
+    auth: false,
     openrouter: false,
+    email: false,
+    billing: false,
+    monitoring: false,
   };
 
   const errors: Record<string, string> = {};
@@ -21,6 +26,13 @@ export async function GET() {
   } catch (error) {
     errors.database = error instanceof Error ? error.message : 'Unknown error';
   }
+
+  checks.email = isEmailConfigured();
+  if (!checks.email) errors.email = 'Transactional email not configured';
+  checks.billing = isNuvemshopConfigured();
+  if (!checks.billing) errors.billing = 'Nuvemshop integration not configured';
+  checks.monitoring = Boolean(process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN);
+  if (!checks.monitoring) errors.monitoring = 'Sentry not configured';
 
   // Test Supabase connection
   try {
@@ -36,17 +48,16 @@ export async function GET() {
     errors.supabase = error instanceof Error ? error.message : 'Unknown error';
   }
 
-  // Test Clerk (check if keys are configured)
+  // Test custom auth (JWT secret configured)
   try {
-    const clerkPubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-    const clerkSecretKey = process.env.CLERK_SECRET_KEY;
-    if (clerkPubKey && clerkSecretKey && !clerkPubKey.includes('SUA_CHAVE')) {
-      checks.clerk = true;
+    const jwtSecret = process.env.JWT_SECRET;
+    if (jwtSecret && jwtSecret.length >= 32) {
+      checks.auth = true;
     } else {
-      errors.clerk = 'Keys not configured';
+      errors.auth = 'JWT_SECRET not configured (min 32 chars)';
     }
   } catch (error) {
-    errors.clerk = error instanceof Error ? error.message : 'Unknown error';
+    errors.auth = error instanceof Error ? error.message : 'Unknown error';
   }
 
   // Test OpenRouter
@@ -69,6 +80,6 @@ export async function GET() {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     checks,
-    errors: Object.keys(errors).length > 0 ? errors : undefined,
+    ...(process.env.NODE_ENV === 'development' && Object.keys(errors).length > 0 ? { errors } : {}),
   }, { status: allHealthy ? 200 : 503 });
 }

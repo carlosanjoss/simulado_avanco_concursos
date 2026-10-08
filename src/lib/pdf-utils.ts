@@ -1,6 +1,12 @@
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { Buffer } from 'buffer';
 
+// Suppress pdfjs-dist canvas warnings in serverless environments
+if (typeof process !== 'undefined' && process.env.NODE_ENV === 'production') {
+  // @ts-ignore - suppress canvas warnings
+  globalThis.__PDFJS_DISABLE_CANVAS_WARNINGS__ = true;
+}
+
 export const MAX_PDF_PAGES = 400;
 
 export interface PDFExtractResult {

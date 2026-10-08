@@ -12,7 +12,7 @@ const userId = `quota-test-${randomUUID()}`;
 const monthKey = '2099-12';
 
 try {
-  await prisma.user.create({ data: { id: userId, clerkId: userId, email: `${userId}@example.invalid` } });
+  await prisma.user.create({ data: { id: userId, email: `${userId}@example.invalid` } });
   const reserve = () => prisma.$queryRawUnsafe(
     'INSERT INTO "MonthlyUsage" ("id", "userId", "monthKey", "count", "createdAt", "updatedAt") VALUES ($1, $2, $3, 1, NOW(), NOW()) ON CONFLICT ("userId", "monthKey") DO UPDATE SET "count" = "MonthlyUsage"."count" + 1, "updatedAt" = NOW() WHERE "MonthlyUsage"."count" < 2 RETURNING "count"',
     randomUUID(), userId, monthKey,

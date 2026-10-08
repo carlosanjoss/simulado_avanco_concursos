@@ -48,7 +48,9 @@ describe('AI provider request', () => {
     const body = JSON.parse(String(request?.body));
 
     expect(result.batch.questoes[0].id).toBe(7);
-    expect(body.model).toBe('deepseek/deepseek-v4-flash-0731');
+    // Compara com o modelo realmente configurado (env) ou com o padrão do código,
+    // para o teste não defasar quando o modelo for trocado.
+    expect(body.model).toBe(process.env.OPENROUTER_MODEL || 'deepseek/deepseek-v4-flash-0731');
     expect(body.response_format.type).toBe('json_schema');
     expect(body.response_format.json_schema.strict).toBe(true);
     expect(body.response_format.json_schema.schema.properties.questoes.items.properties.id).toEqual({

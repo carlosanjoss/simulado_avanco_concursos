@@ -1,6 +1,8 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import { resolve4 } from 'node:dns/promises';
+import net from 'node:net';
 import pg from 'pg';
 
 const { Client } = pg;
@@ -39,14 +41,32 @@ const migrations = (await readdir(migrationDirectory))
   .filter((file) => file.endsWith('.sql'))
   .sort((left, right) => left.localeCompare(right));
 
-const client = new Client({
-  connectionString,
-  ssl: { rejectUnauthorized: false },
-  connectionTimeoutMillis: 20_000,
-});
+async function connectDatabase() {
+  const original = new URL(connectionString);
+  const candidates = await resolve4(original.hostname).catch(() => []);
+  if (!candidates.length) candidates.push(null);
+  let lastError;
+  for (const address of [...new Set(candidates)]) {
+    const stream = address ? () => {
+      const socket = new net.Socket();
+      socket.connect = function connect(port) { return net.Socket.prototype.connect.call(this, port, address); };
+      return socket;
+    } : undefined;
+    const db = new Client({ connectionString, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 12_000, stream });
+    try {
+      await db.connect();
+      return db;
+    } catch (error) {
+      lastError = error;
+      await db.end().catch(() => undefined);
+    }
+  }
+  throw lastError;
+}
+
+const client = await connectDatabase();
 
 try {
-  await client.connect();
   await client.query(`
     create table if not exists public._avanco_migrations (
       name text primary key,

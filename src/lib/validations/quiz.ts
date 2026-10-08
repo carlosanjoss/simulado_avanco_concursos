@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const baseQuestion = {
   id: z.number().int().min(1).max(30),
-  tema: z.string().trim().min(2).max(80).default('Conteúdo geral'),
+  tema: z.string().trim().min(2).max(120).default('Conteúdo geral'),
   enunciado: z.string().trim().min(10),
   justificativa: z.string().trim().min(10),
   dificuldade: z.enum(['Médio', 'Avançado']),

@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/prisma';
 import { feedbackSubmissionSchema } from '@/lib/validations/attempt';
+import { getAuthenticatedUser } from '@/lib/server-auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth();
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      return NextResponse.json({ success: true, feedbackId: 'build' });
+    }
 
-    if (!userId) {
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
@@ -18,14 +21,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Dados inválidos' }, { status: 400 });
     }
     const { simuladoId, questaoId, type, message } = parsed.data;
-
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-    });
-
-    if (!user) {
-      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
-    }
 
     const simulado = await prisma.simulado.findFirst({
       where: { id: simuladoId, userId: user.id },

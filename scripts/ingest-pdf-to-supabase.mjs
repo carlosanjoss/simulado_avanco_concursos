@@ -49,10 +49,8 @@ async function main() {
   const secretKey = localEnv.SUPABASE_SECRET_KEY || localEnv.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !secretKey) throw new Error('Credenciais Supabase ausentes.');
 
-  const prisma = new PrismaClient({
-    datasourceUrl: `file:${path.join(process.cwd(), 'prisma', 'dev.db').replaceAll('\\', '/')}`,
-  });
-  const user = await prisma.user.findFirst({ where: { email }, select: { clerkId: true } });
+  const prisma = new PrismaClient({ datasourceUrl: localEnv.DATABASE_URL });
+  const user = await prisma.user.findFirst({ where: { email }, select: { id: true } });
   await prisma.$disconnect();
   if (!user) throw new Error(`Usuário local não encontrado para ${email}.`);
 
@@ -69,14 +67,14 @@ async function main() {
   });
   const now = new Date().toISOString();
   const lookup = await supabase.from('simulado_documents').select('*')
-    .eq('user_id', user.clerkId).eq('file_hash', fileHash).gt('expires_at', now)
+    .eq('user_id', user.id).eq('file_hash', fileHash).gt('expires_at', now)
     .order('created_at', { ascending: false }).limit(1).maybeSingle();
   if (lookup.error) throw lookup.error;
 
   let storedDocument = lookup.data;
   if (!storedDocument) {
     const created = await supabase.from('simulado_documents').insert({
-      user_id: user.clerkId,
+      user_id: user.id,
       file_name: path.basename(pdfPath),
       file_hash: fileHash,
       file_size: file.length,
@@ -127,7 +125,7 @@ async function main() {
     }
     const rows = chunks.map((chunk, chunkIndex) => ({
       document_id: storedDocument.id,
-      user_id: user.clerkId,
+      user_id: user.id,
       batch_index: batchIndex,
       chunk_index: chunkIndex,
       page_number: chunk.pageNumber,
@@ -172,7 +170,7 @@ async function main() {
     match_threshold: -1,
     match_count: 3,
     p_document_id: storedDocument.id,
-    p_user_id: user.clerkId,
+    p_user_id: user.id,
     p_page_from: 1,
     p_page_to: document.numPages,
   });

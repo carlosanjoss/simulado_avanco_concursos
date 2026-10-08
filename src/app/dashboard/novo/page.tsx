@@ -52,7 +52,7 @@ export default function NovoSimuladoPage() {
 
   const generateQuiz = async () => {
     if (!pdfFile) return toast.error('Selecione um PDF antes de continuar.');
-    if (remaining === 0) return toast.error('Você já utilizou suas duas gerações deste mês.');
+    if (remaining === 0) return toast.error('Você atingiu seu limite de gerações deste mês.');
 
     setIsGenerating(true);
     setGenerationProgress(null);

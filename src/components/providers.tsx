@@ -1,16 +1,54 @@
-'use client';
+'use client'
 
-import { ClerkProvider } from '@clerk/nextjs';
-import { ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 
-export function ClerkProviders({ children }: { children: ReactNode }) {
+interface User {
+  id: string
+  email: string
+  name: string | null
+  imageUrl: string | null
+  isAdmin: boolean
+}
+
+interface AuthContextType {
+  user: User | null
+  isLoading: boolean
+  refresh: () => Promise<void>
+}
+
+const AuthContext = createContext<AuthContextType | null>(null)
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  const refresh = async () => {
+    try {
+      const res = await fetch('/api/auth/me')
+      const data = await res.json()
+      setUser(data.user)
+    } catch {
+      setUser(null)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    refresh()
+  }, [])
+
   return (
-    <ClerkProvider
-      publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!}
-      signInFallbackRedirectUrl="/dashboard"
-      signUpFallbackRedirectUrl="/dashboard"
-    >
+    <AuthContext.Provider value={{ user, isLoading, refresh }}>
       {children}
-    </ClerkProvider>
-  );
+    </AuthContext.Provider>
+  )
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext)
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider')
+  }
+  return context
 }

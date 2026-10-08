@@ -1,6 +1,6 @@
-import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { getAuthenticatedUser } from '@/lib/server-auth';
 import {
   getVectorDocument,
   MAX_BATCH_TEXT_LENGTH,
@@ -26,7 +26,10 @@ const batchSchema = z.object({
 }).strict();
 
 export async function POST(request: NextRequest) {
-  const { userId } = await auth();
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    return NextResponse.json({ success: true, batchIndex: 0 });
+  }
+  const userId = (await getAuthenticatedUser(request))?.id;
   if (!userId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
   if (!isSupabaseVectorConfigured()) {
     return NextResponse.json({ error: 'Processamento em lotes não configurado' }, { status: 503 });

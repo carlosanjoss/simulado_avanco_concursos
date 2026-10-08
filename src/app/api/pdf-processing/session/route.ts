@@ -1,6 +1,6 @@
-import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { getAuthenticatedUser } from '@/lib/server-auth';
 import {
   createVectorDocument,
   deleteVectorDocument,
@@ -24,8 +24,15 @@ const sessionSchema = z.object({
   }
 });
 
+async function getUserId(request: NextRequest): Promise<string | null> {
+  return (await getAuthenticatedUser(request))?.id ?? null
+}
+
 export async function POST(request: NextRequest) {
-  const { userId } = await auth();
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    return NextResponse.json({ success: true, documentId: '00000000-0000-0000-0000-000000000000', batchSize: 1, expiresAt: new Date().toISOString() });
+  }
+  const userId = await getUserId(request);
   if (!userId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
   if (!isSupabaseVectorConfigured()) {
     return NextResponse.json({ error: 'Processamento em lotes não configurado' }, { status: 503 });
@@ -49,7 +56,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const { userId } = await auth();
+  const userId = await getUserId(request);
   if (!userId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
   if (!isSupabaseVectorConfigured()) return NextResponse.json({ success: true });
 

@@ -6,7 +6,7 @@ async function main() {
   try {
     const user = await prisma.user.findFirst({
       where: { email: 'carlosdeemelo@gmail.com' },
-      select: { id: true, email: true, isAdmin: true, clerkId: true }
+      select: { id: true, email: true, isAdmin: true }
     });
     
     console.log('User before:', user);

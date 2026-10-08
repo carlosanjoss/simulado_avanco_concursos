@@ -1,57 +1,53 @@
-import { auth } from '@clerk/nextjs/server';
-import { redirect } from 'next/navigation';
-import { prisma } from '@/lib/prisma';
-import DashboardClient from './DashboardClient';
-import { getMonthlyUsage, MONTHLY_QUIZ_LIMIT } from '@/lib/usage-limit';
+import { redirect } from 'next/navigation'
+import { prisma } from '@/lib/prisma'
+import DashboardClient from './DashboardClient'
+import { getMonthlyUsage } from '@/lib/usage-limit'
+import { getAuthenticatedUserFromCookie } from '@/lib/server-auth'
+import { headers } from 'next/headers'
 
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic'
 
 export default async function DashboardPage() {
-  const { userId } = await auth();
-
-  if (!userId) {
-    redirect('/sign-in');
+  // Ler token do cookie via headers
+  const headersList = await headers()
+  const cookie = headersList.get('cookie') || ''
+  const user = await getAuthenticatedUserFromCookie(cookie)
+  if (!user) {
+    redirect('/sign-in')
   }
 
-  const user = await prisma.user.findUnique({
-    where: { clerkId: userId },
-  });
+  const simulados = await prisma.simulado.findMany({
+    where: { userId: user.id, deletedAt: null },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      titulo: true,
+      totalQuestoes: true,
+      temasFoco: true,
+      pdfNome: true,
+      status: true,
+      createdAt: true,
+      tentativas: {
+        orderBy: { updatedAt: 'desc' },
+        take: 1,
+        select: { pontuacao: true, percentual: true, concluidoEm: true, currentIndex: true },
+      },
+    },
+  })
 
-  const simulados = user
-    ? await prisma.simulado.findMany({
-        where: { userId: user.id, deletedAt: null },
-        orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          titulo: true,
-          totalQuestoes: true,
-          temasFoco: true,
-          pdfNome: true,
-          status: true,
-          createdAt: true,
-          tentativas: {
-            orderBy: { updatedAt: 'desc' },
-            take: 1,
-            select: { pontuacao: true, percentual: true, concluidoEm: true, currentIndex: true },
-          },
-        },
-      })
-    : [];
+  const completedAttempts = await prisma.tentativa.findMany({
+    where: { userId: user.id, concluidoEm: { not: null } },
+    select: { percentual: true, totalQuestoes: true },
+  })
 
-  const completedAttempts = user
-    ? await prisma.tentativa.findMany({
-        where: { userId: user.id, concluidoEm: { not: null } },
-        select: { percentual: true, totalQuestoes: true },
-      })
-    : [];
-  const usage = user ? await getMonthlyUsage(user.id, user.email) : { used: 0, limit: MONTHLY_QUIZ_LIMIT, remaining: MONTHLY_QUIZ_LIMIT, unlimited: false, monthKey: '' };
+  const usage = await getMonthlyUsage(user.id, user.email)
   const average = completedAttempts.length
     ? Math.round(completedAttempts.reduce((sum, attempt) => sum + attempt.percentual, 0) / completedAttempts.length)
-    : 0;
+    : 0
 
   return (
     <DashboardClient
-      isAdmin={user?.isAdmin ?? false}
+      isAdmin={user.isAdmin ?? false}
       simulados={simulados.map((simulado) => ({
         id: simulado.id,
         titulo: simulado.titulo,
@@ -71,7 +67,8 @@ export default async function DashboardPage() {
         remaining: usage.remaining,
         used: usage.used,
         unlimited: usage.unlimited,
+        limit: usage.limit,
       }}
     />
-  );
+  )
 }

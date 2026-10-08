@@ -1,28 +1,29 @@
-'use client';
+'use client'
 
-import Image from 'next/image';
-import Link from 'next/link';
-import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from '@clerk/nextjs';
-import { ArrowRight, BarChart3, Check, CheckCircle2, ChevronDown, FileCheck2, FileText, LockKeyhole, MessageSquareText, ShieldCheck, Sparkles, Target, UploadCloud } from 'lucide-react';
-import { BrandLogo } from '@/components/shared/BrandLogo';
+import Image from 'next/image'
+import Link from 'next/link'
+import { ArrowRight, BarChart3, Check, CheckCircle2, ChevronDown, FileCheck2, FileText, LockKeyhole, MessageSquareText, ShieldCheck, Sparkles, Target, UploadCloud } from 'lucide-react'
+import { BrandLogo } from '@/components/shared/BrandLogo'
+import { useAuth } from '@/components/providers'
 
 const benefits = [
   { icon: Sparkles, title: 'Rápido e prático', text: 'Gere um simulado completo em poucos minutos.' },
   { icon: Target, title: 'Foco personalizado', text: 'Escolha os tópicos que realmente deseja estudar.' },
   { icon: FileCheck2, title: 'Questões de qualidade', text: '30 questões baseadas diretamente no seu material.' },
   { icon: MessageSquareText, title: 'Feedback imediato', text: 'Veja a resposta correta e a justificativa detalhada.' },
-  { icon: ShieldCheck, title: '100% seguro', text: 'Seu PDF é processado e descartado após a geração.' },
-];
+  { icon: ShieldCheck, title: 'Privacidade por padrão', text: 'O PDF original não é mantido como biblioteca após a geração.' },
+]
 
 const faq = [
   ['Meu PDF fica armazenado?', 'Não. O documento e seus vetores são usados apenas durante a geração e descartados ao final.'],
-  ['Quantos simulados posso criar?', 'No plano gratuito, cada usuário pode gerar até dois simulados por mês.'],
+  ['Como funciona o acesso?', 'Durante o beta, o acesso pode ser liberado por convite. Quando o cadastro público estiver ativo, você também poderá criar sua conta diretamente.'],
   ['Quantas questões são geradas?', 'Todo simulado possui exatamente 30 questões variadas.'],
   ['Posso escolher os assuntos?', 'Sim. O campo de tópicos de foco permite priorizar conteúdos presentes no PDF.'],
   ['Quais PDFs são aceitos?', 'Arquivos PDF com texto extraível, até 20 MB e no máximo 400 páginas.'],
-];
+]
 
 export default function LandingPage() {
+  const { user } = useAuth()
   return (
     <div className="min-h-screen bg-white text-[#06183d]">
       <header className="h-20 bg-white/95 backdrop-blur border-b border-slate-100 sticky top-0 z-50">
@@ -32,15 +33,16 @@ export default function LandingPage() {
             <Link href="#inicio" className="text-blue-700">Início</Link>
             <Link href="#como-funciona" className="hover:text-blue-700">Como funciona</Link>
             <Link href="#recursos" className="hover:text-blue-700">Recursos</Link>
+            <Link href="/precos" className="hover:text-blue-700">Preços</Link>
             <Link href="#seguranca" className="hover:text-blue-700">Segurança</Link>
             <Link href="#faq" className="hover:text-blue-700">FAQ</Link>
           </nav>
           <div className="flex items-center gap-3">
-            <SignedOut>
-              <SignInButton mode="modal"><button className="hidden sm:block px-5 py-2.5 rounded-xl border border-blue-900 text-blue-950 font-semibold hover:bg-blue-50">Entrar</button></SignInButton>
-              <SignUpButton mode="modal"><button className="px-5 py-2.5 rounded-xl bg-[#ffc400] text-[#06183d] font-bold hover:bg-yellow-400 shadow-sm">Começar agora</button></SignUpButton>
-            </SignedOut>
-            <SignedIn><Link href="/dashboard" className="px-5 py-2.5 rounded-xl bg-blue-700 text-white font-semibold">Dashboard</Link><UserButton afterSignOutUrl="/" /></SignedIn>
+            {user ? (
+              <Link href="/dashboard" className="px-5 py-2.5 rounded-xl bg-blue-700 text-white font-semibold">Dashboard</Link>
+            ) : (
+              <Link href="/sign-in" className="px-5 py-2.5 rounded-xl bg-blue-700 text-white font-semibold">Entrar</Link>
+            )}
           </div>
         </div>
       </header>
@@ -54,11 +56,14 @@ export default function LandingPage() {
               <h1 className="text-5xl md:text-6xl lg:text-[68px] leading-[1.02] font-black tracking-tight mt-7">Transforme seus PDFs em <span className="text-blue-700 relative">simulados<span className="absolute h-1.5 bg-[#ffc400] left-0 right-0 -bottom-1 -rotate-1 rounded-full" /></span> inteligentes</h1>
               <p className="text-lg text-slate-600 max-w-xl mt-7 leading-relaxed">Envie seus materiais de estudo e receba questões personalizadas com inteligência artificial. Estude de forma prática, objetiva e focada no que realmente importa.</p>
               <div className="mt-9 flex flex-wrap gap-4">
-                <SignedOut><SignUpButton mode="modal"><button className="bg-blue-700 hover:bg-blue-800 text-white px-7 py-4 rounded-xl font-bold flex items-center gap-3 shadow-xl shadow-blue-200">Começar agora gratuitamente <ArrowRight className="w-5 h-5" /></button></SignUpButton></SignedOut>
-                <SignedIn><Link href="/dashboard/novo" className="bg-blue-700 hover:bg-blue-800 text-white px-7 py-4 rounded-xl font-bold flex items-center gap-3 shadow-xl shadow-blue-200">Criar novo simulado <ArrowRight className="w-5 h-5" /></Link></SignedIn>
+                {user ? (
+                  <Link href="/dashboard/novo" className="bg-blue-700 hover:bg-blue-800 text-white px-7 py-4 rounded-xl font-bold flex items-center gap-3 shadow-xl shadow-blue-200">Criar novo simulado <ArrowRight className="w-5 h-5" /></Link>
+                ) : (
+                  <Link href="/sign-in" className="bg-blue-700 hover:bg-blue-800 text-white px-7 py-4 rounded-xl font-bold flex items-center gap-3 shadow-xl shadow-blue-200">Entrar <ArrowRight className="w-5 h-5" /></Link>
+                )}
                 <Link href="#como-funciona" className="px-7 py-4 rounded-xl border border-slate-300 font-bold hover:bg-slate-50">Ver como funciona</Link>
               </div>
-              <div className="mt-10 flex items-center gap-4 text-sm text-slate-600"><div className="flex -space-x-2">{['C','A','J','M'].map((letter, index) => <span key={letter} className={`w-9 h-9 rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-bold ${['bg-blue-700','bg-emerald-500','bg-amber-500','bg-indigo-500'][index]}`}>{letter}</span>)}</div><p><strong className="text-[#06183d]">+2.000 estudantes</strong><br />já estudam com mais foco</p></div>
+              <div className="mt-10 flex items-center gap-3 text-sm text-slate-600"><CheckCircle2 className="h-6 w-6 text-emerald-500" /><p><strong className="text-[#06183d]">Questões rastreáveis</strong><br />com página e trecho do material usado</p></div>
             </div>
             <div className="relative z-10 min-h-[420px] lg:min-h-[540px] flex items-center justify-center">
               <Image src="/images/hero-study.png" alt="Livros, plano de estudos e notebook com o Avanço Simulados" width={1450} height={1080} className="w-full max-w-[760px] h-auto object-contain drop-shadow-2xl" priority />
@@ -82,14 +87,14 @@ export default function LandingPage() {
 
         <section className="py-24 bg-white"><div className="max-w-7xl mx-auto px-5 grid lg:grid-cols-2 gap-16 items-center"><Image src="/images/quiz-study.png" alt="Simulado interativo em notebook" width={1400} height={1050} className="w-full h-auto" /><div><span className="text-blue-700 font-bold uppercase tracking-widest text-xs">Preparação completa</span><h2 className="text-4xl md:text-5xl font-black mt-4">Estude com o que realmente importa</h2><p className="text-slate-600 text-lg mt-5">Questões contextualizadas, justificativas detalhadas e acompanhamento de desempenho em uma experiência criada para concursos, faculdade e certificações.</p><div className="mt-8 space-y-4">{['Simulados baseados no seu PDF','Nível médio e avançado','30 questões de múltipla escolha','Histórico e evolução do desempenho'].map(text => <div key={text} className="flex gap-3 items-center font-semibold"><CheckCircle2 className="w-6 h-6 text-emerald-500" />{text}</div>)}</div></div></div></section>
 
-        <section id="seguranca" className="avanco-navy-deep avanco-grid text-white py-20"><div className="max-w-7xl mx-auto px-5 grid lg:grid-cols-2 items-center gap-12"><div><span className="text-[#ffc400] font-bold uppercase tracking-widest text-xs">Privacidade em primeiro lugar</span><h2 className="text-4xl md:text-5xl font-black mt-4">Seus materiais em segurança</h2><p className="text-blue-100 text-lg mt-5 max-w-xl">O PDF é processado somente durante a criação do simulado. O arquivo, o texto e os vetores temporários não são armazenados.</p><div className="grid sm:grid-cols-2 gap-4 mt-8">{['Processamento temporário','PDF não armazenado','Acesso protegido pelo Clerk','Simulados privados por usuário'].map(text => <div key={text} className="flex gap-3"><span className="w-6 h-6 rounded bg-[#ffc400] text-[#06183d] flex items-center justify-center"><Check className="w-4 h-4" /></span>{text}</div>)}</div></div><Image src="/images/security-study.png" alt="Proteção e segurança dos materiais" width={1280} height={1280} className="w-full max-w-[520px] mx-auto h-auto" /></div></section>
+        <section id="seguranca" className="avanco-navy-deep avanco-grid text-white py-20"><div className="max-w-7xl mx-auto px-5 grid lg:grid-cols-2 items-center gap-12"><div><span className="text-[#ffc400] font-bold uppercase tracking-widest text-xs">Privacidade em primeiro lugar</span><h2 className="text-4xl md:text-5xl font-black mt-4">Seus materiais em segurança</h2><p className="text-blue-100 text-lg mt-5 max-w-xl">O PDF é processado somente para criar o simulado. Em documentos extensos, texto e vetores ficam armazenados temporariamente, isolados por usuário e com exclusão automática após a expiração.</p><div className="grid sm:grid-cols-2 gap-4 mt-8">{['Retenção temporária','Exclusão automática','Acesso protegido','Simulados privados por usuário'].map(text => <div key={text} className="flex gap-3"><span className="w-6 h-6 rounded bg-[#ffc400] text-[#06183d] flex items-center justify-center"><Check className="w-4 h-4" /></span>{text}</div>)}</div></div><Image src="/images/security-study.png" alt="Proteção e segurança dos materiais" width={1280} height={1280} className="w-full max-w-[520px] mx-auto h-auto" /></div></section>
 
         <section id="faq" className="py-24 bg-white"><div className="max-w-3xl mx-auto px-5"><div className="text-center"><span className="text-blue-700 font-bold uppercase tracking-widest text-xs">Dúvidas frequentes</span><h2 className="text-4xl font-black mt-3">Tudo o que você precisa saber</h2></div><div className="mt-10 divide-y divide-slate-200 border-y border-slate-200">{faq.map(([question,answer]) => <details key={question} className="group py-5"><summary className="list-none cursor-pointer flex items-center justify-between font-bold text-lg">{question}<ChevronDown className="w-5 h-5 group-open:rotate-180 transition-transform" /></summary><p className="text-slate-600 mt-3 pr-8 leading-relaxed">{answer}</p></details>)}</div></div></section>
 
-        <section className="px-5 pb-20"><div className="max-w-6xl mx-auto rounded-3xl avanco-navy text-white p-10 md:p-14 text-center relative overflow-hidden"><LockKeyhole className="absolute -left-6 -bottom-8 w-40 h-40 text-white/5" /><h2 className="text-4xl font-black relative">Pronto para avançar nos seus estudos?</h2><p className="text-blue-100 mt-3 relative">Crie seu primeiro simulado gratuitamente e transforme leitura em prática.</p><SignedOut><SignUpButton mode="modal"><button className="mt-7 bg-[#ffc400] text-[#06183d] px-8 py-4 rounded-xl font-black relative">Criar meu primeiro simulado</button></SignUpButton></SignedOut><SignedIn><Link href="/dashboard/novo" className="inline-block mt-7 bg-[#ffc400] text-[#06183d] px-8 py-4 rounded-xl font-black relative">Novo simulado</Link></SignedIn></div></section>
+        <section id="cta" className="px-5 pb-20"><div className="max-w-6xl mx-auto rounded-3xl avanco-navy text-white p-10 md:p-14 text-center relative overflow-hidden"><LockKeyhole className="absolute -left-6 -bottom-8 w-40 h-40 text-white/5" /><h2 className="text-4xl font-black relative">Pronto para avançar nos seus estudos?</h2><p className="text-blue-100 mt-3 relative">Estude com questões do seu próprio material e acompanhe sua evolução.</p>{user ? (<Link href="/dashboard/novo" className="inline-block mt-7 bg-[#ffc400] text-[#06183d] px-8 py-4 rounded-xl font-black relative">Novo simulado</Link>) : (<Link href="/precos" className="inline-block mt-7 bg-[#ffc400] text-[#06183d] px-8 py-4 rounded-xl font-black relative">Conhecer planos</Link>)}</div></section>
       </main>
 
-      <footer className="bg-[#02132f] text-blue-100"><div className="max-w-7xl mx-auto px-5 py-10 flex flex-col sm:flex-row items-center justify-between gap-6"><BrandLogo light /><p className="text-sm">© 2026 Avanço Simulados. Estude com inteligência.</p></div></footer>
+      <footer className="bg-[#02132f] text-blue-100"><div className="max-w-7xl mx-auto px-5 py-10 flex flex-col sm:flex-row items-center justify-between gap-6"><BrandLogo light /><div className="flex flex-wrap justify-center gap-5 text-sm"><Link href="/precos">Preços</Link><Link href="/termos">Termos</Link><Link href="/privacidade">Privacidade</Link></div><p className="text-sm">© 2026 Avanço Simulados.</p></div></footer>
     </div>
-  );
+  )
 }

@@ -1,6 +1,6 @@
-import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { getAuthenticatedUser } from '@/lib/server-auth';
 import { finalizeVectorDocument, getVectorDocument } from '@/lib/document-vector-store';
 import { isSupabaseVectorConfigured } from '@/lib/supabase-admin';
 
@@ -10,7 +10,10 @@ export const dynamic = 'force-dynamic';
 const finalizeSchema = z.object({ documentId: z.string().uuid() }).strict();
 
 export async function POST(request: NextRequest) {
-  const { userId } = await auth();
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    return NextResponse.json({ success: true, documentId: 'build' });
+  }
+  const userId = (await getAuthenticatedUser(request))?.id;
   if (!userId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
   if (!isSupabaseVectorConfigured()) {
     return NextResponse.json({ error: 'Processamento em lotes não configurado' }, { status: 503 });

@@ -1,32 +1,27 @@
-import { auth } from '@clerk/nextjs/server';
-import { prisma } from '@/lib/prisma';
-import { redirect, notFound } from 'next/navigation';
-import SimuladoClient from './SimuladoClient';
-import type { PublicQuestion, Question } from '@/types/quiz';
+import { prisma } from '@/lib/prisma'
+import { redirect, notFound } from 'next/navigation'
+import SimuladoClient from './SimuladoClient'
+import type { PublicQuestion, Question } from '@/types/quiz'
+import { getAuthenticatedUserFromCookie } from '@/lib/server-auth'
+import { headers } from 'next/headers'
 
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic'
 
 interface SimuladoClientData {
-  id: string;
-  titulo: string;
-  totalQuestoes: number;
-  temasFoco: string | null;
-  pdfNome: string;
-  questoesJson: PublicQuestion[];
-  createdAt: string;
+  id: string
+  titulo: string
+  totalQuestoes: number
+  temasFoco: string | null
+  pdfNome: string
+  questoesJson: PublicQuestion[]
+  createdAt: string
 }
 
 async function getSimulado(simuladoId: string, userId: string) {
-  const user = await prisma.user.findUnique({
-    where: { clerkId: userId },
-  });
-
-  if (!user) return null;
-
   const simulado = await prisma.simulado.findFirst({
     where: {
       id: simuladoId,
-      userId: user.id,
+      userId: userId,
     },
     select: {
       id: true,
@@ -37,40 +32,41 @@ async function getSimulado(simuladoId: string, userId: string) {
       questoesJson: true,
       createdAt: true,
     },
-  });
+  })
 
-  if (!simulado) return null;
+  if (!simulado) return null
 
   const questions = (JSON.parse(simulado.questoesJson) as Question[]).map(
     ({ resposta_correta: _answer, justificativa: _explanation, sources: _sources, ...publicQuestion }) => publicQuestion,
-  );
+  )
 
   return {
     ...simulado,
     questoesJson: questions,
     createdAt: simulado.createdAt.toISOString(),
-  } as SimuladoClientData;
+  } as SimuladoClientData
 }
 
 interface SimuladoPageProps {
-  params: Promise<{ id: string }>;
-  searchParams?: Promise<{ retake?: string }>;
+  params: Promise<{ id: string }>
+  searchParams?: Promise<{ retake?: string }>
 }
 
 export default async function SimuladoPage({ params, searchParams }: SimuladoPageProps) {
-  const { userId } = await auth();
-  
-  if (!userId) {
-    redirect('/sign-in');
+  const headersList = await headers()
+  const cookie = headersList.get('cookie') || ''
+  const user = await getAuthenticatedUserFromCookie(cookie)
+  if (!user) {
+    redirect('/sign-in')
   }
 
-  const { id } = await params;
-  const query = searchParams ? await searchParams : {};
-  const simulado = await getSimulado(id, userId);
+  const { id } = await params
+  const query = searchParams ? await searchParams : {}
+  const simulado = await getSimulado(id, user.id)
 
   if (!simulado) {
-    notFound();
+    notFound()
   }
 
-  return <SimuladoClient simulado={simulado} forceRetake={query.retake === '1'} />;
+  return <SimuladoClient simulado={simulado} forceRetake={query.retake === '1'} />
 }

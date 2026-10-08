@@ -1,8 +1,9 @@
 import type { Question } from '@/types/quiz';
+import { createHash } from 'node:crypto';
 
 export const QUESTION_GENERATION_CONCURRENCY = 4;
 export const QUESTION_GENERATION_ATTEMPTS = 3;
-export const DUPLICATE_REPAIR_ATTEMPTS = 2;
+export const DUPLICATE_REPAIR_ATTEMPTS = 3;
 
 function normalizedWords(text: string): Set<string> {
   return new Set(
@@ -16,7 +17,13 @@ function normalizedWords(text: string): Set<string> {
   );
 }
 
-export function questionSimilarity(first: string, second: string): number {
+function contentHash(text: string): string {
+  return createHash('sha256')
+    .update(text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ''))
+    .digest('hex');
+}
+
+function questionSimilarity(first: string, second: string): number {
   const firstWords = normalizedWords(first);
   const secondWords = normalizedWords(second);
   if (firstWords.size === 0 || secondWords.size === 0) return 0;
@@ -27,56 +34,38 @@ export function questionSimilarity(first: string, second: string): number {
   return intersection / (firstWords.size + secondWords.size - intersection);
 }
 
-export function findDuplicateQuestionIds(questions: Question[], threshold = 0.72): number[] {
+export function findDuplicateQuestionIds(questions: Question[], threshold = 0.55): number[] {
   const duplicates = new Set<number>();
   const ordered = [...questions].sort((a, b) => a.id - b.id);
+
+  // Primeiro: hash exato de conteúdo normalizado
+  const contentHashes = new Map<string, number>();
+  for (const question of ordered) {
+    const hash = contentHash(question.enunciado);
+    if (contentHashes.has(hash)) {
+      duplicates.add(question.id);
+    } else {
+      contentHashes.set(hash, question.id);
+    }
+  }
+
+  // Segundo: similaridade textual (Jaccard) - mais agressivo
   for (let current = 0; current < ordered.length; current += 1) {
+    if (duplicates.has(ordered[current].id)) continue;
     for (let previous = 0; previous < current; previous += 1) {
+      if (duplicates.has(ordered[previous].id)) continue;
       if (questionSimilarity(ordered[current].enunciado, ordered[previous].enunciado) >= threshold) {
         duplicates.add(ordered[current].id);
         break;
       }
     }
   }
-  return Array.from(duplicates).sort((a, b) => a - b);
-}
 
-function cosineSimilarity(first: number[], second: number[]): number {
-  const length = Math.min(first.length, second.length);
-  let dot = 0;
-  let firstNorm = 0;
-  let secondNorm = 0;
-  for (let index = 0; index < length; index += 1) {
-    dot += first[index] * second[index];
-    firstNorm += first[index] ** 2;
-    secondNorm += second[index] ** 2;
-  }
-  if (!firstNorm || !secondNorm) return 0;
-  return dot / (Math.sqrt(firstNorm) * Math.sqrt(secondNorm));
-}
-
-export function findSemanticDuplicateQuestionIds(
-  questions: Question[],
-  embeddings: number[][],
-  threshold = 0.86,
-): number[] {
-  const duplicates = new Set<number>();
-  const ordered = [...questions].sort((a, b) => a.id - b.id);
-  if (ordered.length !== embeddings.length) throw new Error('INVALID_DUPLICATE_EMBEDDINGS');
-  for (let current = 0; current < ordered.length; current += 1) {
-    for (let previous = 0; previous < current; previous += 1) {
-      if (cosineSimilarity(embeddings[current], embeddings[previous]) >= threshold) {
-        duplicates.add(ordered[current].id);
-        break;
-      }
-    }
-  }
   return Array.from(duplicates).sort((a, b) => a - b);
 }
 
 export function getQuestionQualityIssues(
   question: Question,
-  domain: 'mathematics' | 'general',
 ): string[] {
   const issues: string[] = [];
   const normalizedOptions = question.opcoes.map((option) => option
@@ -89,15 +78,6 @@ export function getQuestionQualityIssues(
   }
   const correctOption = question.opcoes.find((option) => option.startsWith(`${question.resposta_correta})`));
   if (!correctOption) issues.push('alternativa correta ausente');
-
-  if (domain === 'mathematics') {
-    const numericOptions = question.opcoes.filter((option) => /\d/.test(option)).length;
-    const hasCalculationEvidence = /(?:\d\s*[+\-×÷*/=<>^]\s*\d|\b(c[aá]lculo|resultado|substituindo|logo|portanto|f[oó]rmula)\b)/i
-      .test(question.justificativa);
-    if (numericOptions >= 2 && !hasCalculationEvidence) {
-      issues.push('justificativa matemática sem cálculo verificável');
-    }
-  }
   return issues;
 }
 

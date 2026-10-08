@@ -1,16 +1,27 @@
-import { auth } from '@clerk/nextjs/server';
-import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { MONTHLY_QUIZ_LIMIT, getMonthlyUsage } from '@/lib/usage-limit';
+import { NextRequest, NextResponse } from 'next/server'
+import { MONTHLY_QUIZ_LIMIT, getMonthlyUsage } from '@/lib/usage-limit'
+import { getAuthenticatedUser } from '@/lib/server-auth'
 
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic'
 
-export async function GET() {
-  const { userId } = await auth();
-  if (!userId) return NextResponse.json({ success: false, code: 'UNAUTHORIZED' }, { status: 401 });
-  const user = await prisma.user.findUnique({ where: { clerkId: userId }, select: { id: true, email: true } });
-  const usage = user
-    ? await getMonthlyUsage(user.id, user.email)
-    : { used: 0, remaining: MONTHLY_QUIZ_LIMIT, limit: MONTHLY_QUIZ_LIMIT, unlimited: false };
-  return NextResponse.json({ success: true, ...usage });
+export async function GET(request: NextRequest) {
+  // Skip auth during build time
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    return NextResponse.json({
+      success: true,
+      used: 0,
+      remaining: MONTHLY_QUIZ_LIMIT,
+      limit: MONTHLY_QUIZ_LIMIT,
+      unlimited: false,
+      monthKey: ''
+    })
+  }
+
+  const user = await getAuthenticatedUser(request)
+  if (!user) {
+    return NextResponse.json({ success: false, code: 'UNAUTHORIZED' }, { status: 401 })
+  }
+
+  const usage = await getMonthlyUsage(user.id, user.email)
+  return NextResponse.json({ success: true, ...usage })
 }

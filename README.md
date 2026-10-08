@@ -1,130 +1,90 @@
 # Avanço Simulados
 
-Aplicação SaaS que transforma PDFs em simulados interativos com 30 questões de múltipla escolha, feedback e histórico de desempenho.
+Aplicação Next.js que transforma PDFs em simulados interativos de 30 questões, com RAG, evidências por página, correção, histórico e administração de usuários.
 
-## O que está implementado
+## Recursos principais
 
-- autenticação Clerk, landing page, dashboard, resolução e histórico;
-- áreas de Matérias, Banco de Questões e Plano de Estudos semanal;
-- PDF de até 20 MB e 400 páginas, validado por MIME, extensão e assinatura `%PDF-`;
-- extração em memória com `pdfjs-dist`;
-- divisão do texto em até 1.600 chunks e embeddings locais na CPU com `Xenova/all-MiniLM-L6-v2` (384 dimensões);
-- processamento opcional de PDFs extensos no navegador em lotes idempotentes de 5 páginas, com busca vetorial isolada por usuário e documento no Supabase;
-- RAG efêmero no modo local; no modo Supabase, texto e vetores expiram em 7 dias, enquanto as evidências essenciais ficam anexadas às questões;
-- 30 chamadas individuais à OpenRouter, com no máximo 4 simultâneas;
-- recuperação seletiva das chamadas que falharem e regeneração de questões duplicadas;
-- exatamente 30 questões de múltipla escolha, validadas por Zod antes de salvar;
-- cota mensal transacional de 2 gerações para contas gratuitas, com exceção configurável para desenvolvimento;
-- gabarito protegido e pontuação recalculada no servidor;
-- resultado detalhado por tipo, tema e dificuldade;
-- navegação vertical das 30 questões no desktop e paleta responsiva em telas menores;
-- testes unitários do pipeline, schema, concorrência, PDF, embeddings e cota.
-
-## Stack
-
-Next.js 14.2, React 18, TypeScript, Tailwind CSS, Clerk, Prisma, PostgreSQL/Supabase, pgvector, Zod, Vitest, PDF.js e Transformers.js.
+- autenticação própria por e-mail e senha, acesso por convite e cookies HTTP-only;
+- dashboard administrativo com convites, busca, suspensão, papéis, revogação de sessões, reset de uso e exclusão de usuários;
+- PDFs de até 20 MB e 400 páginas;
+- processamento em lotes de cinco páginas e vetores temporários isolados por usuário no Supabase;
+- 30 chamadas controladas à OpenRouter, recuperação seletiva de falhas e deduplicação;
+- fontes por questão com página, trecho, chunk e similaridade;
+- cota mensal transacional e rate limit distribuído opcional com Upstash;
+- simulados, tentativas, banco de questões, matérias e planos de estudo.
+- preparação comercial com preços, assinatura Nuvemshop/Nuvem Pago, verificação de e-mail e recuperação de senha;
+- exportação e exclusão de conta, Termos de Uso e Política de Privacidade;
+- Sentry, health check comercial, backup PostgreSQL e testes E2E com Playwright.
 
 ## Execução local
 
-Requisitos: Node.js 20+, npm, uma aplicação Clerk, uma chave OpenRouter e um projeto Supabase.
+Requisitos: Node.js 20+, npm, PostgreSQL/Supabase e uma chave OpenRouter.
 
 ```powershell
 npm install
-Copy-Item .env.example .env.local
+Copy-Item .env.local.example .env.local
 npm run db:supabase:migrate
 npm run dev
 ```
 
-Configure `.env.local`:
+Preencha as variáveis descritas em `.env.example`. `JWT_SECRET` deve ter pelo menos 32 caracteres. A primeira conta administrativa só pode ser criada com `ADMIN_BOOTSTRAP_TOKEN`:
 
-```env
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
-CLERK_SECRET_KEY=sk_test_...
-DATABASE_URL="postgresql://postgres.PROJECT_REF:SENHA@POOLER_HOST:6543/postgres?pgbouncer=true&connection_limit=1"
-DIRECT_URL="postgresql://postgres.PROJECT_REF:SENHA@POOLER_HOST:5432/postgres"
-OPENROUTER_API_KEY=...
-OPENROUTER_MODEL=deepseek/deepseek-v4-flash-0731
-EMBEDDING_MODEL=Xenova/all-MiniLM-L6-v2
-APP_TIMEZONE=America/Fortaleza
-
-# Opcional, somente para testes locais sem cota mensal
-CLERK_DEV_USER_EMAIL=
+```text
+http://localhost:3000/sign-up?bootstrap=SEU_TOKEN_TEMPORARIO
 ```
 
-O MiniLM organiza e seleciona os trechos do PDF; a OpenRouter gera as questões. O modelo de embeddings é baixado no primeiro uso e permanece no cache local.
+Depois da primeira conta, remova `ADMIN_BOOTSTRAP_TOKEN` do ambiente e use convites emitidos pelo dashboard.
 
-### PDFs extensos com Supabase
+## Banco e privacidade
 
-Crie um projeto Supabase e execute as migrations `001`, `002` e `003` da pasta
-`supabase/migrations`. A terceira migration cria o banco principal da aplicação,
-substituindo completamente o SQLite. Também é possível informar a connection
-string real em `SUPABASE_DATABASE_URL` e rodar:
+Execute todas as migrations versionadas em `supabase/migrations` com:
 
-```bash
+```powershell
 npm run db:supabase:migrate
 npm run db:supabase:check
 ```
 
-Use a URL do transaction pooler em `DATABASE_URL`, com `pgbouncer=true`, para a
-aplicação na Vercel. Use a conexão direta ou o session pooler em `DIRECT_URL` e
-`SUPABASE_DATABASE_URL` para tarefas administrativas e migrations.
+Use o transaction pooler em `DATABASE_URL` e uma conexão direta/session pooler em `DIRECT_URL` e `SUPABASE_DATABASE_URL`. O PDF original não é persistido. Para documentos extensos, texto e vetores ficam temporariamente no Supabase e são removidos após a expiração pelo cron `/api/cron/cleanup`.
 
-Há duas formas de autenticação:
+## Rotas
 
-- recomendada: ative Clerk em `Authentication > Third-party auth` no Supabase e configure `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`;
-- administrativa: configure `SUPABASE_URL` com `SUPABASE_SECRET_KEY` (ou a chave legada `SUPABASE_SERVICE_ROLE_KEY`). A chave secreta é usada somente no servidor.
+- `/dashboard/novo` — upload e geração;
+- `/dashboard/simulado/[id]` — resolução e resultado;
+- `/dashboard/materias`, `/dashboard/questoes`, `/dashboard/planos` — estudo e organização;
+- `/dashboard/perfil` — nome e senha;
+- `/dashboard/admin/usuarios` — gerenciamento administrativo;
+- `/precos` — comparação dos planos e checkout externo da Nuvemshop;
+- `/termos`, `/privacidade` — documentos legais;
+- `/esqueci-senha`, `/redefinir-senha`, `/verificar-email` — ciclo de segurança da conta;
+- `/api/pdf-processing/*` — processamento vetorial em lotes;
+- `/api/gerador`, `/api/resposta`, `/api/tentativa` — geração e execução dos simulados.
 
-Quando configurado, o navegador extrai o texto página por página e envia lotes
-de cinco páginas. Cada lote é vetorizado na CPU, salvo com número da página e
-chave idempotente. Cada questão consulta uma região distinta, recupera até 20
-candidatos e seleciona 8 fontes com diversidade de páginas. Os chunks expiram
-em 7 dias e devem ser removidos periodicamente com
-`delete_expired_simulado_documents()`.
-
-## Fluxo de dados e privacidade
-
-1. Sem Supabase, o PDF é validado e extraído durante a requisição; com Supabase, a extração acontece no navegador em lotes de cinco páginas.
-2. O texto é dividido em chunks e vetorizado localmente na CPU do servidor.
-3. Contextos distintos, distribuídos pelas páginas e por objetivos pedagógicos, são enviados à OpenRouter em 30 chamadas controladas.
-4. Cada resposta é validada; falhas e duplicatas lexicais ou semânticas são refeitas seletivamente.
-5. Páginas, trechos, IDs dos chunks e similaridade ficam anexados a cada questão para auditoria.
-6. O PDF original e as respostas brutas do modelo não são armazenados. No modo Supabase, chunks e vetores são removidos pela rotina de expiração após 7 dias.
-
-O suporte a até 400 páginas é um limite funcional. O tempo e o consumo de memória variam conforme a quantidade de texto do documento e a máquina que executa os embeddings.
-Um PDF pode ser auditado sem enviá-lo à IA com
-`npm run pdf:audit -- caminho/arquivo.pdf`.
-
-## Qualidade
+## Validação
 
 ```powershell
 npm test
 npm run lint
 npx tsc --noEmit
 npm run build
+npm audit --omit=dev
+npm run test:e2e
 ```
 
-## Rotas principais
+## Deploy na Vercel
 
-- `/dashboard/novo` — upload e geração;
-- `/dashboard/materias` — organização dos temas identificados;
-- `/dashboard/questoes` — pesquisa e filtros no banco pessoal de questões;
-- `/dashboard/planos` — plano semanal persistido no navegador;
-- `/dashboard/simulado/[id]` — resolução e resultado;
-- `/api/pdf-processing/*` — sessão, lotes idempotentes e finalização no Supabase;
-- `/api/gerador` — contexto vetorial → OpenRouter → PostgreSQL/Supabase;
-- `/api/resposta` — correção autenticada;
-- `/api/tentativa` — progresso e conclusão;
-- `/api/usage` e `/api/providers` — cota e disponibilidade sem expor segredos.
+1. Vincule o projeto à Vercel e configure as variáveis de `.env.example` em Production e Preview.
+2. Defina `NEXT_PUBLIC_APP_URL` com o domínio final.
+3. Configure `JWT_SECRET`, `CRON_SECRET` e, somente durante o bootstrap inicial, `ADMIN_BOOTSTRAP_TOKEN`.
+4. Execute `npm run db:supabase:migrate` contra o banco de produção antes do deploy.
+5. Faça o deploy e verifique `/api/health`, login, geração, feedback e gerenciamento de usuários.
 
-## Publicação na Vercel
+## Preparação comercial
 
-1. Importe o repositório na Vercel e mantenha o preset Next.js.
-2. Cadastre as variáveis de `.env.example` nos ambientes Production e Preview.
-3. Use o transaction pooler do Supabase em `DATABASE_URL` e o session pooler ou conexão direta em `DIRECT_URL`.
-4. Defina `NEXT_PUBLIC_APP_URL` com o domínio final e cadastre esse mesmo domínio no Clerk.
-5. Crie `CRON_SECRET` com um valor longo e aleatório. O cron diário de `vercel.json` remove documentos vetoriais expirados.
-6. Antes do primeiro deploy, execute `npm run db:supabase:migrate` uma vez contra o projeto de produção.
+As instruções de Nuvemshop, monitoramento, backups e liberação estão em `docs/commercial-operations.md`. A integração concede o plano Pro somente após receber `order/paid`, consultar o pedido na API da Nuvemshop e relacionar o e-mail pago a uma conta existente.
 
-As rotas de geração e processamento permitem até 300 segundos. Os lotes de cinco páginas reduzem o tamanho de cada requisição e os chunks permanecem temporariamente no Supabase. O cache do MiniLM usa `/tmp` na Vercel, porque o restante do sistema de arquivos da função não deve ser tratado como persistente. Para limitar requisições por IP entre múltiplas instâncias, ainda é recomendável substituir o rate limit em memória por Redis/Upstash; a cota mensal principal já é transacional no PostgreSQL.
+Depois de configurar as credenciais e o domínio público, registre o webhook de pagamento com `npm run nuvemshop:webhooks`.
+Antes da liberação comercial, execute `npm run commercial:check` para conferir se preços, URLs, contatos, monitoramento e credenciais obrigatórias foram preenchidos.
 
-Nunca versione `.env`, banco local, cache dos modelos ou chaves de API.
+Antes da venda, configure preços, URLs e IDs dos produtos, valide os documentos legais com assessoria jurídica e habilite e-mail transacional, Sentry e backups externos.
+
+Nunca versione `.env.local`, chaves, tokens, dados coletados ou caches de modelos.
