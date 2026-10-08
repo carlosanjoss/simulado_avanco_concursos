@@ -16,6 +16,7 @@
     "test:e2e:ui": "playwright test --ui",
     "db:backup": "node scripts/backup-database.mjs",
     "db:backup:verify": "node scripts/verify-backup.mjs",
+    "env:prepare": "node scripts/prepare-local-env.mjs",
     "commercial:check": "node --env-file=.env.local scripts/check-commercial-config.mjs",
     "nuvemshop:webhooks": "node --env-file=.env.local scripts/register-nuvemshop-webhooks.mjs",
     "db:push": "prisma db push",

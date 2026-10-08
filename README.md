@@ -29,6 +29,8 @@ npm run dev
 
 Preencha as variáveis descritas em `.env.example`. `JWT_SECRET` deve ter pelo menos 32 caracteres. A primeira conta administrativa só pode ser criada com `ADMIN_BOOTSTRAP_TOKEN`:
 
+Use `npm run env:prepare` para adicionar, sem sobrescrever, as variáveis locais ausentes. O guia completo de obtenção de cada credencial está em `docs/credential-setup.md`.
+
 ```text
 http://localhost:3000/sign-up?bootstrap=SEU_TOKEN_TEMPORARIO
 ```
