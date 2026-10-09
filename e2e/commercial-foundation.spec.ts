@@ -25,11 +25,12 @@ test('documentos legais são públicos', async ({ page }) => {
 })
 
 test('recuperação de senha não revela se a conta existe', async ({ page }) => {
-  await page.addInitScript(() => {
-    const originalFetch = window.fetch.bind(window)
-    window.fetch = (input, init) => String(input).includes('/api/auth/forgot-password')
-      ? Promise.resolve(new Response(JSON.stringify({ success: true, message: 'Se a conta existir, enviaremos as instruções por e-mail.' }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-      : originalFetch(input, init)
+  await page.route('**/api/auth/forgot-password', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, message: 'Se a conta existir, enviaremos as instruções por e-mail.' }),
+    })
   })
   await page.goto('/esqueci-senha')
   await page.getByLabel('E-mail').fill('pessoa@example.com')

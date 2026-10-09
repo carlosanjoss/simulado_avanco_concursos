@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import Link from 'next/link'
 import * as Sentry from '@sentry/nextjs'
 import './globals.css'
 
@@ -20,7 +21,7 @@ export default function GlobalError({ error, retry }: { error: Error & { digest?
             {error.digest && <p className="mt-3 text-xs text-slate-400">Código de referência: {error.digest}</p>}
             <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
               <button type="button" onClick={() => retry()} className="rounded-xl bg-blue-700 px-5 py-3 font-bold text-white">Tentar novamente</button>
-              <a href="/" className="rounded-xl border border-slate-300 px-5 py-3 font-bold">Ir para o início</a>
+              <Link href="/" className="rounded-xl border border-slate-300 px-5 py-3 font-bold">Ir para o início</Link>
             </div>
           </section>
         </main>
