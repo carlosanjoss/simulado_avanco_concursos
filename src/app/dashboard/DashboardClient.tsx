@@ -353,6 +353,7 @@ export default function DashboardClient({ simulados, stats, isAdmin }: Dashboard
 function HistoryRow({ simulado }: { simulado: Simulado }) {
   const completed = simulado.status === 'CONCLUIDO'
   const inProgress = simulado.status === 'EM_ANDAMENTO'
+  const isReviewSession = simulado.pdfNome === 'Caderno de erros'
   return (
     <article className="px-5 sm:px-6 py-4 flex flex-col lg:flex-row lg:items-center gap-4 hover:bg-slate-50 transition-colors">
       <span className={`w-11 h-11 rounded-xl flex items-center justify-center ${completed ? 'bg-emerald-50 text-emerald-600' : inProgress ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-700'}`}>
@@ -368,7 +369,7 @@ function HistoryRow({ simulado }: { simulado: Simulado }) {
         {completed ? `${Math.round(simulado.tentativa?.percentual || 0)}%` : inProgress ? 'Em andamento' : 'Nao iniciado'}
       </span>
       <div className="flex flex-wrap gap-2">
-        {!completed && (
+        {!completed && !isReviewSession && (
           <Link href={`/dashboard/simulado/${simulado.id}/editar`} className="inline-flex items-center justify-center gap-2 border border-slate-300 rounded-xl px-4 py-2 text-sm font-bold hover:border-blue-500 hover:text-blue-700">
             <Pencil className="w-4 h-4" /> Editar
           </Link>

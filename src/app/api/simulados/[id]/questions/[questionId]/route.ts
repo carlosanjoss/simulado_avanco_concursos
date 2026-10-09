@@ -22,6 +22,7 @@ async function ownedSimulado(request: NextRequest, id: string) {
   if (!user) return { error: NextResponse.json({ error: 'Não autorizado' }, { status: 401 }) }
   const simulado = await prisma.simulado.findFirst({ where: { id, userId: user.id, deletedAt: null }, include: { tentativas: { where: { concluidoEm: { not: null } }, select: { id: true }, take: 1 } } })
   if (!simulado) return { error: NextResponse.json({ error: 'Simulado não encontrado' }, { status: 404 }) }
+  if (simulado.pdfHash.startsWith('review-session:')) return { error: NextResponse.json({ error: 'Questões de uma revisão são vinculadas ao caderno de erros e não podem ser alteradas.' }, { status: 409 }) }
   if (simulado.tentativas.length) return { error: NextResponse.json({ error: 'Um simulado concluído não pode ser alterado.' }, { status: 409 }) }
   return { user, simulado }
 }

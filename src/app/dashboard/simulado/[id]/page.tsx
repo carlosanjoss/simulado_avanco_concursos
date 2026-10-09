@@ -37,7 +37,7 @@ async function getSimulado(simuladoId: string, userId: string) {
   if (!simulado) return null
 
   const questions = (JSON.parse(simulado.questoesJson) as Question[]).map(
-    ({ resposta_correta: _answer, justificativa: _explanation, sources: _sources, ...publicQuestion }) => publicQuestion,
+    ({ resposta_correta: _answer, justificativa: _explanation, sources: _sources, reviewCardId: _reviewCardId, ...publicQuestion }) => publicQuestion,
   )
 
   return {

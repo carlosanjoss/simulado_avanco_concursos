@@ -20,9 +20,10 @@ export interface Question {
   justificativa: string;
   dificuldade: QuestionDifficulty;
   sources?: QuestionSource[];
+  reviewCardId?: string;
 }
 
-export type PublicQuestion = Omit<Question, 'resposta_correta' | 'justificativa' | 'sources'>;
+export type PublicQuestion = Omit<Question, 'resposta_correta' | 'justificativa' | 'sources' | 'reviewCardId'>;
 
 export interface QuestionEvaluation {
   correct: boolean | null;

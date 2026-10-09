@@ -11,11 +11,15 @@ export const dynamic = 'force-dynamic'
 export default async function ReviewNotebookPage() {
   const user = await getAuthenticatedUserFromCookie((await headers()).get('cookie'))
   if (!user) redirect('/sign-in')
-  const cards = await prisma.reviewCard.findMany({
-    where: { userId: user.id, masteredAt: null, dueAt: { lte: new Date() } },
-    orderBy: [{ dueAt: 'asc' }, { updatedAt: 'desc' }],
-    include: { simulado: { select: { titulo: true } } },
-    take: 100,
-  })
-  return <DashboardShell><ReviewCardsClient initialCards={cards.map((card) => ({ id: card.id, simuladoId: card.simuladoId, simuladoTitulo: card.simulado.titulo, question: JSON.parse(card.questionJson) as Question, lastAnswer: card.lastAnswer, repetitions: card.repetitions }))} /></DashboardShell>
+  const now = new Date()
+  const [cards, pendingCount] = await Promise.all([
+    prisma.reviewCard.findMany({
+      where: { userId: user.id, masteredAt: null, dueAt: { lte: now } },
+      orderBy: [{ dueAt: 'asc' }, { updatedAt: 'desc' }],
+      include: { simulado: { select: { titulo: true } } },
+      take: 100,
+    }),
+    prisma.reviewCard.count({ where: { userId: user.id, masteredAt: null } }),
+  ])
+  return <DashboardShell><ReviewCardsClient pendingCount={pendingCount} initialCards={cards.map((card) => ({ id: card.id, simuladoId: card.simuladoId, simuladoTitulo: card.simulado.titulo, question: JSON.parse(card.questionJson) as Question, lastAnswer: card.lastAnswer, repetitions: card.repetitions }))} /></DashboardShell>
 }
