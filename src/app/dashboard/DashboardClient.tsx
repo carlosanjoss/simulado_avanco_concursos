@@ -4,7 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useAuth } from '@/components/providers'
 import { useState, useEffect } from 'react'
-import { ArrowRight, BarChart3, CheckCircle2, Clock3, FilePlus2, FileText, Play, RefreshCw, Target, MessageSquareWarning } from 'lucide-react'
+import { ArrowRight, BarChart3, CheckCircle2, Clock3, FilePlus2, FileText, Pencil, Play, RefreshCw, Target, MessageSquareWarning } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import DashboardShell from '../../components/dashboard/DashboardShell'
@@ -161,7 +161,7 @@ export default function DashboardClient({ simulados, stats, isAdmin }: Dashboard
           <div className="relative z-10 max-w-xl">
             <p className="text-[#ffc400] uppercase tracking-widest text-xs font-bold">Pratique com seu proprio material</p>
             <h2 className="text-3xl sm:text-4xl font-black mt-2">Crie um novo simulado</h2>
-            <p className="text-blue-100 mt-2">Envie seu PDF e receba 30 questoes personalizadas em poucos minutos.</p>
+            <p className="text-blue-100 mt-2">Envie seu PDF e escolha a quantidade e a dificuldade das questões.</p>
             <Link href="/dashboard/novo" className="inline-flex items-center gap-2 bg-[#ffc400] text-[#06183d] rounded-xl px-6 py-3 font-black mt-6 hover:bg-yellow-300">
               <FilePlus2 className="w-5 h-5" /> Novo Simulado
             </Link>
@@ -368,6 +368,11 @@ function HistoryRow({ simulado }: { simulado: Simulado }) {
         {completed ? `${Math.round(simulado.tentativa?.percentual || 0)}%` : inProgress ? 'Em andamento' : 'Nao iniciado'}
       </span>
       <div className="flex flex-wrap gap-2">
+        {!completed && (
+          <Link href={`/dashboard/simulado/${simulado.id}/editar`} className="inline-flex items-center justify-center gap-2 border border-slate-300 rounded-xl px-4 py-2 text-sm font-bold hover:border-blue-500 hover:text-blue-700">
+            <Pencil className="w-4 h-4" /> Editar
+          </Link>
+        )}
         {completed && (
           <Link href={`/dashboard/simulado/${simulado.id}`} className="inline-flex items-center justify-center gap-2 border border-slate-300 rounded-xl px-4 py-2 text-sm font-bold hover:border-blue-500 hover:text-blue-700">
             <FileText className="w-4 h-4" /> Ver resultado

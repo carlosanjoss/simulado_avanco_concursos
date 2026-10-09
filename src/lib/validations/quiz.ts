@@ -1,11 +1,11 @@
 import { z } from 'zod';
 
 const baseQuestion = {
-  id: z.number().int().min(1).max(30),
+  id: z.number().int().min(1).max(50),
   tema: z.string().trim().min(2).max(120).default('Conteúdo geral'),
   enunciado: z.string().trim().min(10),
   justificativa: z.string().trim().min(10),
-  dificuldade: z.enum(['Médio', 'Avançado']),
+  dificuldade: z.enum(['Fácil', 'Médio', 'Avançado']),
   sources: z.array(z.object({
     chunkId: z.string().min(1),
     pageNumber: z.number().int().positive(),
@@ -28,12 +28,15 @@ export const questionSchema = z.discriminatedUnion('tipo', [multipleChoiceSchema
 
 export const quizSchema = z.object({
   titulo: z.string().trim().min(3).max(160),
-  total_questoes: z.literal(30),
-  questoes: z.array(questionSchema).length(30),
+  total_questoes: z.number().int().min(5).max(50),
+  questoes: z.array(questionSchema).min(5).max(50),
 }).superRefine((quiz, context) => {
+  if (quiz.questoes.length !== quiz.total_questoes) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['questoes'], message: 'A quantidade de questões deve corresponder ao total informado.' });
+  }
   const ids = quiz.questoes.map((question) => question.id);
   if (ids.some((id, index) => id !== index + 1)) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ['questoes'], message: 'Os IDs devem ser sequenciais de 1 a 30.' });
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['questoes'], message: 'Os IDs devem ser sequenciais a partir de 1.' });
   }
 });
 

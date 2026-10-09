@@ -5,7 +5,6 @@ const OPENROUTER_TIMEOUT_MS = 300_000;
 const MAX_TOKENS_PER_QUESTION = 2_500;
 const PROVIDER_ATTEMPTS = 2;
 export const QUESTIONS_PER_BATCH = 1;
-export const TOTAL_BATCHES = 30;
 
 class ProviderError extends Error {
   constructor(
@@ -59,7 +58,7 @@ function quizQuestionJsonSchema(startId: number) {
             },
             resposta_correta: { type: 'string', enum: ['A', 'B', 'C', 'D'] },
             justificativa: { type: 'string', minLength: 10 },
-            dificuldade: { type: 'string', enum: ['Médio', 'Avançado'] },
+            dificuldade: { type: 'string', enum: ['Fácil', 'Médio', 'Avançado'] },
           },
           required: [
             'id', 'tipo', 'tema', 'enunciado', 'opcoes',

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { BookOpenCheck, Check, ChevronRight, Clock3, Flame, RefreshCw, Sparkles, Target, Trophy } from 'lucide-react';
 
@@ -9,7 +9,7 @@ const activityLabels = ['Revisão ativa', 'Prática dirigida', 'Fixação'];
 
 interface PlanTask { id: string; day: string; title: string; detail: string; duration: number; mode: string }
 
-export default function StudyPlanClient({ themes }: { themes: string[] }) {
+export default function StudyPlanClient({ themes, weekKey, initialCompleted }: { themes: string[]; weekKey: string; initialCompleted: string[] }) {
   const planThemes = useMemo(() => themes.length ? themes : ['Fundamentos', 'Revisão geral', 'Prática de questões'], [themes]);
   const tasks = useMemo<PlanTask[]>(() => dayNames.map((day, index) => {
     const theme = planThemes[index % planThemes.length];
@@ -23,25 +23,36 @@ export default function StudyPlanClient({ themes }: { themes: string[] }) {
       mode: activityLabels[mode],
     };
   }), [planThemes]);
-  const [completed, setCompleted] = useState<string[]>([]);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    try { setCompleted(JSON.parse(localStorage.getItem('avanco-study-plan') || '[]')); } catch { setCompleted([]); }
-    setLoaded(true);
-  }, []);
-  useEffect(() => { if (loaded) localStorage.setItem('avanco-study-plan', JSON.stringify(completed)); }, [completed, loaded]);
+  const [completed, setCompleted] = useState<string[]>(initialCompleted);
+  const [syncError, setSyncError] = useState('');
 
   const percentage = Math.round((completed.length / tasks.length) * 100);
   const remaining = tasks.length - completed.length;
-  const toggle = (id: string) => setCompleted((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  const toggle = async (id: string) => {
+    const wasCompleted = completed.includes(id);
+    setCompleted((current) => wasCompleted ? current.filter((item) => item !== id) : [...current, id]);
+    setSyncError('');
+    const response = await fetch('/api/study-plan', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekKey, taskKey: id, completed: !wasCompleted }) });
+    if (!response.ok) {
+      setCompleted((current) => wasCompleted ? [...new Set([...current, id])] : current.filter((item) => item !== id));
+      setSyncError('Não foi possível sincronizar o progresso. Tente novamente.');
+    }
+  };
+  const resetWeek = async () => {
+    const previous = completed;
+    setCompleted([]);
+    const response = await fetch(`/api/study-plan?weekKey=${encodeURIComponent(weekKey)}`, { method: 'DELETE' });
+    if (!response.ok) { setCompleted(previous); setSyncError('Não foi possível reiniciar a semana.'); }
+  };
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 pb-28 sm:px-7 sm:py-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div><p className="text-xs font-black uppercase tracking-[0.18em] text-blue-700">Sua semana de estudos</p><h1 className="mt-2 text-3xl font-black sm:text-4xl">Plano de Estudos</h1><p className="mt-2 max-w-2xl text-slate-600">Uma rotina prática criada a partir dos temas dos seus simulados.</p></div>
-        <button type="button" onClick={() => setCompleted([])} className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-black shadow-sm transition hover:border-blue-300 hover:text-blue-700 sm:self-auto"><RefreshCw className="h-4 w-4" /> Reiniciar semana</button>
+        <button type="button" onClick={resetWeek} className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-black shadow-sm transition hover:border-blue-300 hover:text-blue-700 sm:self-auto"><RefreshCw className="h-4 w-4" /> Reiniciar semana</button>
       </div>
+
+      {syncError && <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{syncError}</p>}
 
       <section className="relative mt-7 overflow-hidden rounded-[2rem] bg-gradient-to-br from-[#061b46] via-[#07347d] to-[#075ed1] p-6 text-white shadow-[0_20px_60px_rgba(6,41,104,0.22)] sm:p-8">
         <div className="absolute -right-16 -top-24 h-72 w-72 rounded-full bg-blue-400/20 blur-2xl" /><div className="absolute -bottom-24 right-1/3 h-56 w-56 rounded-full bg-[#ffc400]/15 blur-2xl" />

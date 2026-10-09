@@ -9,7 +9,7 @@ import { useAuth } from '@/components/providers'
 const benefits = [
   { icon: Sparkles, title: 'Rápido e prático', text: 'Gere um simulado completo em poucos minutos.' },
   { icon: Target, title: 'Foco personalizado', text: 'Escolha os tópicos que realmente deseja estudar.' },
-  { icon: FileCheck2, title: 'Questões de qualidade', text: '30 questões baseadas diretamente no seu material.' },
+  { icon: FileCheck2, title: 'Questões de qualidade', text: 'Quantidade e dificuldade ajustadas ao seu objetivo.' },
   { icon: MessageSquareText, title: 'Feedback imediato', text: 'Veja a resposta correta e a justificativa detalhada.' },
   { icon: ShieldCheck, title: 'Privacidade por padrão', text: 'O PDF original não é mantido como biblioteca após a geração.' },
 ]
@@ -17,7 +17,7 @@ const benefits = [
 const faq = [
   ['Meu PDF fica armazenado?', 'Não. O documento e seus vetores são usados apenas durante a geração e descartados ao final.'],
   ['Como funciona o acesso?', 'Durante o beta, o acesso pode ser liberado por convite. Quando o cadastro público estiver ativo, você também poderá criar sua conta diretamente.'],
-  ['Quantas questões são geradas?', 'Todo simulado possui exatamente 30 questões variadas.'],
+  ['Quantas questões são geradas?', 'Você escolhe entre 10, 20, 30, 40 ou 50 questões por simulado.'],
   ['Posso escolher os assuntos?', 'Sim. O campo de tópicos de foco permite priorizar conteúdos presentes no PDF.'],
   ['Quais PDFs são aceitos?', 'Arquivos PDF com texto extraível, até 20 MB e no máximo 400 páginas.'],
 ]
@@ -79,13 +79,13 @@ export default function LandingPage() {
           <div className="max-w-6xl mx-auto px-5 text-center"><span className="text-xs uppercase tracking-[.2em] text-blue-700 font-bold">Como funciona</span><h2 className="text-4xl font-black mt-3">Do seu PDF ao simulado em <span className="text-[#8a5a00]">3 passos</span></h2><p className="text-slate-600 mt-3">Uma experiência simples para você dedicar tempo ao que importa: estudar.</p>
             <div className="grid md:grid-cols-3 gap-6 mt-14">{[
               [UploadCloud,'Envie seu material','Selecione um PDF de até 20 MB e 400 páginas e informe os tópicos que deseja priorizar.'],
-              [Sparkles,'A IA cria o simulado','O conteúdo é analisado e transformado em 30 questões personalizadas.'],
+              [Sparkles,'A IA cria o simulado','O conteúdo é analisado e transformado na quantidade de questões que você escolher.'],
               [BarChart3,'Estude e evolua','Responda, receba feedback imediato e acompanhe seu desempenho.'],
             ].map(([Icon,title,text], index) => { const I = Icon as typeof UploadCloud; return <article key={String(title)} className="relative bg-white border border-slate-200 rounded-2xl p-8 avanco-shadow"><span className="absolute -top-4 left-6 w-9 h-9 rounded-full bg-blue-700 text-white flex items-center justify-center font-black">{index+1}</span><I className="w-12 h-12 text-blue-700 mx-auto mt-2" /><h3 className="font-black text-xl mt-5">{String(title)}</h3><p className="text-slate-500 mt-3 leading-relaxed">{String(text)}</p></article>})}</div>
           </div>
         </section>
 
-        <section className="py-24 bg-white"><div className="max-w-7xl mx-auto px-5 grid lg:grid-cols-2 gap-16 items-center"><Image src="/images/quiz-study.png" alt="Simulado interativo em notebook" width={1400} height={1050} className="w-full h-auto" /><div><span className="text-blue-700 font-bold uppercase tracking-widest text-xs">Preparação completa</span><h2 className="text-4xl md:text-5xl font-black mt-4">Estude com o que realmente importa</h2><p className="text-slate-600 text-lg mt-5">Questões contextualizadas, justificativas detalhadas e acompanhamento de desempenho em uma experiência criada para concursos, faculdade e certificações.</p><div className="mt-8 space-y-4">{['Simulados baseados no seu PDF','Nível médio e avançado','30 questões de múltipla escolha','Histórico e evolução do desempenho'].map(text => <div key={text} className="flex gap-3 items-center font-semibold"><CheckCircle2 className="w-6 h-6 text-emerald-500" />{text}</div>)}</div></div></div></section>
+        <section className="py-24 bg-white"><div className="max-w-7xl mx-auto px-5 grid lg:grid-cols-2 gap-16 items-center"><Image src="/images/quiz-study.png" alt="Simulado interativo em notebook" width={1400} height={1050} className="w-full h-auto" /><div><span className="text-blue-700 font-bold uppercase tracking-widest text-xs">Preparação completa</span><h2 className="text-4xl md:text-5xl font-black mt-4">Estude com o que realmente importa</h2><p className="text-slate-600 text-lg mt-5">Questões contextualizadas, justificativas detalhadas e acompanhamento de desempenho em uma experiência criada para concursos, faculdade e certificações.</p><div className="mt-8 space-y-4">{['Simulados baseados no seu PDF','Dificuldade configurável','De 10 a 50 questões','Histórico e evolução do desempenho'].map(text => <div key={text} className="flex gap-3 items-center font-semibold"><CheckCircle2 className="w-6 h-6 text-emerald-500" />{text}</div>)}</div></div></div></section>
 
         <section id="seguranca" className="avanco-navy-deep avanco-grid text-white py-20"><div className="max-w-7xl mx-auto px-5 grid lg:grid-cols-2 items-center gap-12"><div><span className="text-[#ffc400] font-bold uppercase tracking-widest text-xs">Privacidade em primeiro lugar</span><h2 className="text-4xl md:text-5xl font-black mt-4">Seus materiais em segurança</h2><p className="text-blue-100 text-lg mt-5 max-w-xl">O PDF é processado somente para criar o simulado. Em documentos extensos, texto e vetores ficam armazenados temporariamente, isolados por usuário e com exclusão automática após a expiração.</p><div className="grid sm:grid-cols-2 gap-4 mt-8">{['Retenção temporária','Exclusão automática','Acesso protegido','Simulados privados por usuário'].map(text => <div key={text} className="flex gap-3"><span className="w-6 h-6 rounded bg-[#ffc400] text-[#06183d] flex items-center justify-center"><Check className="w-4 h-4" /></span>{text}</div>)}</div></div><Image src="/images/security-study.png" alt="Proteção e segurança dos materiais" width={1280} height={1280} className="w-full max-w-[520px] mx-auto h-auto" /></div></section>
 

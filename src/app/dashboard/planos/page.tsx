@@ -5,6 +5,7 @@ import type { Question } from '@/types/quiz'
 import StudyPlanClient from './StudyPlanClient'
 import { getAuthenticatedUserFromCookie } from '@/lib/server-auth'
 import { headers } from 'next/headers'
+import { getStudyWeekKey } from '@/lib/study-plan'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,5 +29,7 @@ export default async function StudyPlansPage() {
   }))
   const themes = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 7).map(([theme]) => theme)
 
-  return <DashboardShell><StudyPlanClient themes={themes} /></DashboardShell>
+  const weekKey = getStudyWeekKey()
+  const progress = await prisma.studyPlanProgress.findMany({ where: { userId: user.id, weekKey, completed: true }, select: { taskKey: true } })
+  return <DashboardShell><StudyPlanClient themes={themes} weekKey={weekKey} initialCompleted={progress.map((item) => item.taskKey)} /></DashboardShell>
 }

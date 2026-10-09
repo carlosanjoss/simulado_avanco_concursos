@@ -14,9 +14,11 @@ export async function GET(request: NextRequest) {
       termsAcceptedAt: true, legalVersion: true, createdAt: true, updatedAt: true, lastLoginAt: true,
       subscription: { select: { provider: true, planCode: true, status: true, billingInterval: true, currentPeriodStart: true, currentPeriodEnd: true, lastPaidAt: true, canceledAt: true, createdAt: true, updatedAt: true } },
       monthlyUsage: { select: { monthKey: true, count: true, createdAt: true, updatedAt: true }, orderBy: { monthKey: 'asc' } },
-      simulados: { select: { id: true, titulo: true, totalQuestoes: true, temasFoco: true, pdfNome: true, pdfHash: true, questoesJson: true, status: true, createdAt: true, updatedAt: true, deletedAt: true } },
+      simulados: { select: { id: true, titulo: true, totalQuestoes: true, temasFoco: true, pdfNome: true, pdfHash: true, questoesJson: true, difficultyTarget: true, ocrUsed: true, status: true, createdAt: true, updatedAt: true, deletedAt: true } },
       tentativas: { select: { id: true, simuladoId: true, respostas: true, pontuacao: true, totalQuestoes: true, percentual: true, currentIndex: true, selectedAnswers: true, concluidoEm: true, durationSeconds: true, createdAt: true, updatedAt: true } },
       feedbacks: { select: { id: true, simuladoId: true, questaoId: true, type: true, message: true, createdAt: true } },
+      studyPlanProgress: { select: { weekKey: true, taskKey: true, completed: true, completedAt: true, createdAt: true, updatedAt: true } },
+      reviewCards: { select: { simuladoId: true, questionId: true, questionJson: true, lastAnswer: true, repetitions: true, intervalDays: true, easeFactor: true, dueAt: true, lastReviewedAt: true, masteredAt: true, createdAt: true, updatedAt: true } },
     },
   })
   if (!user) return NextResponse.json({ error: 'Conta não encontrada' }, { status: 404 })

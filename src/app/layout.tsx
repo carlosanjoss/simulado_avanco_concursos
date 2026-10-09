@@ -6,7 +6,7 @@ import { ThemeProvider } from '@/components/theme-provider';
 
 export const metadata: Metadata = {
   title: 'Avanço Simulados — Transforme seus PDFs em simulados com IA',
-  description: 'Envie seus materiais de estudo (PDF) e receba 30 questões de múltipla escolha personalizadas, com justificativas detalhadas e acompanhamento de desempenho.',
+  description: 'Envie seus materiais de estudo em PDF e crie simulados personalizados, com quantidade e dificuldade configuráveis, justificativas e acompanhamento de desempenho.',
 };
 
 export default function RootLayout({

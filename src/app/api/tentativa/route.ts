@@ -4,6 +4,7 @@ import { evaluateAnswer } from '@/lib/quiz-evaluation'
 import { attemptSubmissionSchema } from '@/lib/validations/attempt'
 import type { Question } from '@/types/quiz'
 import { getAuthenticatedUser } from '@/lib/server-auth'
+import { syncReviewCardsFromAttempt } from '@/lib/review-cards'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,16 +39,16 @@ export async function POST(request: NextRequest) {
       select: { id: true, questoesJson: true },
     })
     if (!simulado) return NextResponse.json({ error: 'Simulado não encontrado' }, { status: 404 })
+    const questions = JSON.parse(simulado.questoesJson) as Question[]
 
     const activeKey = `${user.id}:${simulado.id}`
     const existing = await prisma.tentativa.findUnique({ where: { activeKey } })
     const storedAnswers = parseAnswers(existing?.respostas ?? null)
     const storedSelected = parseAnswers(existing?.selectedAnswers ?? null)
-    const respostas = { ...body.respostas, ...storedAnswers }
-    const selectedAnswers = { ...body.selectedAnswers, ...storedSelected, ...respostas }
+    const respostas = { ...storedAnswers, ...body.respostas }
+    const selectedAnswers = { ...storedSelected, ...body.selectedAnswers, ...respostas }
 
     if (body.isFinal) {
-      const questions = JSON.parse(simulado.questoesJson) as Question[]
       if (Object.keys(respostas).length !== questions.length) {
         return NextResponse.json({ error: 'Responda todas as questões antes de finalizar.' }, { status: 409 })
       }
@@ -90,6 +91,8 @@ export async function POST(request: NextRequest) {
           })
 
       await prisma.simulado.update({ where: { id: simulado.id }, data: { status: 'CONCLUIDO' } })
+      await syncReviewCardsFromAttempt({ userId: user.id, simuladoId: simulado.id, questions, answers: respostas })
+        .catch((error) => console.error('Falha ao sincronizar caderno de erros:', error))
       return NextResponse.json({ success: true, tentativaId: tentativa.id, pontuacao, percentual, durationSeconds, isFinal: true })
     }
 
@@ -102,7 +105,7 @@ export async function POST(request: NextRequest) {
         respostas: JSON.stringify(respostas),
         selectedAnswers: JSON.stringify(selectedAnswers),
         pontuacao: 0,
-        totalQuestoes: 30,
+        totalQuestoes: questions.length,
         percentual: 0,
         currentIndex: body.currentIndex ?? 0,
         durationSeconds: body.elapsedSeconds ?? 0,

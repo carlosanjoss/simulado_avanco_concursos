@@ -30,6 +30,8 @@ model User {
   authTokens   AuthToken[]
   subscription Subscription?
   paymentEvents PaymentEvent[]
+  studyPlanProgress StudyPlanProgress[]
+  reviewCards ReviewCard[]
 }
 
 model AuthToken {
@@ -112,17 +114,58 @@ model Simulado {
   pdfNome       String
   pdfHash       String
   questoesJson  String
+  difficultyTarget String         @default("MISTO")
+  ocrUsed       Boolean            @default(false)
   status        String             @default("NAO_INICIADO")
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
   tentativas    Tentativa[]
   feedbacks     QuestionFeedback[]
+  reviewCards   ReviewCard[]
   deletedAt     DateTime?
 
   @@index([userId, pdfHash])
   @@index([userId])
   @@index([createdAt])
   @@index([pdfHash])
+}
+
+model StudyPlanProgress {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weekKey     String
+  taskKey     String
+  completed   Boolean  @default(false)
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, weekKey, taskKey])
+  @@index([userId, weekKey])
+}
+
+model ReviewCard {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  simuladoId     String
+  simulado       Simulado  @relation(fields: [simuladoId], references: [id], onDelete: Cascade)
+  questionId     Int
+  questionJson   String
+  lastAnswer     String?
+  repetitions    Int       @default(0)
+  intervalDays   Int       @default(1)
+  easeFactor     Float     @default(2.5)
+  dueAt          DateTime  @default(now())
+  lastReviewedAt DateTime?
+  masteredAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([userId, simuladoId, questionId])
+  @@index([userId, dueAt])
+  @@index([userId, masteredAt])
 }
 
 model Tentativa {

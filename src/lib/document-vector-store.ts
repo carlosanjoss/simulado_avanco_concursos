@@ -260,12 +260,13 @@ export async function finalizeVectorDocument(document: VectorDocument): Promise<
 export async function getDocumentQuestionContexts(
   document: VectorDocument,
   focus?: string,
+  questionCount = 30,
 ): Promise<Map<number, RetrievedQuestionContext>> {
   if (document.status !== 'ready') throw new Error('VECTOR_DOCUMENT_NOT_READY');
 
   const focusItems = focus?.split(',').map((item) => item.trim()).filter(Boolean) ?? [];
-  const plans = Array.from({ length: 30 }, (_, index) => {
-    const pageWindow = getQuestionPageWindow(index, document.total_pages);
+  const plans = Array.from({ length: questionCount }, (_, index) => {
+    const pageWindow = getQuestionPageWindow(index, document.total_pages, questionCount);
     const objective = RETRIEVAL_OBJECTIVES[index % RETRIEVAL_OBJECTIVES.length];
     const focusItem = focusItems.length ? focusItems[index % focusItems.length] : '';
     const query = [focusItem, objective, 'conteúdo específico e verificável para elaborar uma questão'].filter(Boolean).join('; ');

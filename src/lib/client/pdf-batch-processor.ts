@@ -3,7 +3,7 @@ const MAX_PDF_PAGES = 400;
 const REQUEST_ATTEMPTS = 3;
 
 export interface PdfProcessingProgress {
-  phase: 'opening' | 'extracting' | 'embedding' | 'finalizing';
+  phase: 'opening' | 'extracting' | 'ocr' | 'embedding' | 'finalizing';
   currentPage: number;
   totalPages: number;
   currentBatch: number;
@@ -53,7 +53,7 @@ export async function cleanupPdfProcessing(documentId: string): Promise<void> {
 export async function processPdfInBrowser(
   file: File,
   onProgress: (progress: PdfProcessingProgress) => void,
-): Promise<{ documentId: string; totalPages: number; chunkCount: number }> {
+): Promise<{ documentId: string; totalPages: number; chunkCount: number; ocrPages: number }> {
   onProgress({
     phase: 'opening', currentPage: 0, totalPages: 0, currentBatch: 0, totalBatches: 0,
     message: 'Abrindo e validando o PDF no navegador...',
@@ -86,6 +86,8 @@ export async function processPdfInBrowser(
   });
 
   let documentId = session.documentId;
+  let ocrWorker: { recognize(image: HTMLCanvasElement): Promise<{ data: { text: string } }>; terminate(): Promise<unknown> } | null = null;
+  let ocrPages = 0;
   try {
     for (let batchIndex = 0; batchIndex < totalBatches; batchIndex += 1) {
       const pageStart = batchIndex * PAGE_BATCH_SIZE + 1;
@@ -100,12 +102,35 @@ export async function processPdfInBrowser(
         });
         const page = await pdf.getPage(pageNumber);
         const textContent = await page.getTextContent();
-        const text = (textContent.items as PdfTextItem[])
+        let text = (textContent.items as PdfTextItem[])
           .map((item) => `${item.str || ''}${item.hasEOL ? '\n' : ' '}`)
           .join('')
           .replace(/[^\S\n]+/g, ' ')
           .replace(/\n{3,}/g, '\n\n')
           .trim();
+        if (text.length < 40) {
+          onProgress({
+            phase: 'ocr', currentPage: pageNumber, totalPages,
+            currentBatch: batchIndex + 1, totalBatches,
+            message: `Aplicando OCR na página digitalizada ${pageNumber} de ${totalPages}...`,
+          });
+          const viewport = page.getViewport({ scale: 1.75 });
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.ceil(viewport.width);
+          canvas.height = Math.ceil(viewport.height);
+          const canvasContext = canvas.getContext('2d', { alpha: false });
+          if (!canvasContext) throw new Error('Não foi possível preparar a página para OCR.');
+          await page.render({ canvas, canvasContext, viewport }).promise;
+          if (!ocrWorker) {
+            const { createWorker } = await import('tesseract.js');
+            ocrWorker = await createWorker('por');
+          }
+          const recognized = await ocrWorker.recognize(canvas);
+          text = recognized.data.text.replace(/[^\S\n]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+          ocrPages += 1;
+          canvas.width = 1;
+          canvas.height = 1;
+        }
         pages.push({ pageNumber, text });
         page.cleanup();
       }
@@ -132,9 +157,11 @@ export async function processPdfInBrowser(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ documentId }),
     });
+    if (ocrWorker) await ocrWorker.terminate();
     await loadingTask.destroy();
-    return { documentId, totalPages, chunkCount: completed.chunkCount };
+    return { documentId, totalPages, chunkCount: completed.chunkCount, ocrPages };
   } catch (error) {
+    if (ocrWorker) await ocrWorker.terminate().catch(() => undefined);
     await loadingTask.destroy().catch(() => undefined);
     await cleanupPdfProcessing(documentId);
     documentId = '';

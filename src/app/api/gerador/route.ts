@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
-import { generateQuizBatchWithFallback, TOTAL_BATCHES } from '@/lib/ai-providers'
+import { generateQuizBatchWithFallback } from '@/lib/ai-providers'
 import { embedTexts, vectorizePdfText } from '@/lib/embeddings'
 import { extractTextFromPDF, validatePDFBuffer, validatePDFFile } from '@/lib/pdf-utils'
 import { buildQuizPrompts } from '@/lib/prompts/quiz-generation'
@@ -27,6 +27,8 @@ import type { Question } from '@/types/quiz'
 import { getAuthenticatedUser } from '@/lib/server-auth'
 
 const MAX_FOCUS_LENGTH = 500
+const ALLOWED_QUESTION_COUNTS = new Set([10, 20, 30, 40, 50])
+const ALLOWED_DIFFICULTIES = new Set(['Fácil', 'Médio', 'Avançado', 'Misto'])
 export const maxDuration = 300
 export const dynamic = 'force-dynamic'
 
@@ -104,6 +106,17 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
       ? documentIdEntry
       : undefined
     const focusTopics = sanitizeFocus(formData.get('focusTopics') ?? formData.get('temasFoco'))
+    const requestedCount = Number(formData.get('questionCount') || 30)
+    if (!ALLOWED_QUESTION_COUNTS.has(requestedCount)) {
+      return errorResponse('INVALID_AI_RESPONSE', 'Escolha 10, 20, 30, 40 ou 50 questões.', 400)
+    }
+    const requestedDifficulty = String(formData.get('difficulty') || 'Misto')
+    if (!ALLOWED_DIFFICULTIES.has(requestedDifficulty)) {
+      return errorResponse('INVALID_AI_RESPONSE', 'Dificuldade inválida.', 400)
+    }
+    const questionCount = requestedCount
+    const difficultyTarget = requestedDifficulty as 'Fácil' | 'Médio' | 'Avançado' | 'Misto'
+    const ocrUsed = formData.get('ocrUsed') === 'true'
     if (!documentId && !(fileEntry instanceof File)) {
       return errorResponse('INVALID_FILE', 'Selecione um arquivo PDF.', 400)
     }
@@ -120,7 +133,7 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
       if (!vectorDocument || vectorDocument.status !== 'ready') {
         return errorResponse('VECTOR_DOCUMENT_ERROR', 'O processamento do PDF não foi concluído.', 409)
       }
-      pdfHash = createHash('sha256').update(vectorDocument.file_hash).update(focusTopics || '').digest('hex')
+      pdfHash = createHash('sha256').update(vectorDocument.file_hash).update(focusTopics || '').update(String(questionCount)).update(difficultyTarget).digest('hex')
       pdfName = vectorDocument.file_name
       pageCount = vectorDocument.total_pages
     } else {
@@ -136,7 +149,7 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
       if (!signatureValidation.valid) {
         return errorResponse('INVALID_FILE', signatureValidation.error!, 400)
       }
-      pdfHash = createHash('sha256').update(uploadedBuffer).update(focusTopics || '').digest('hex')
+      pdfHash = createHash('sha256').update(uploadedBuffer).update(focusTopics || '').update(String(questionCount)).update(difficultyTarget).digest('hex')
     }
 
     usageReserved = await reserveMonthlyGeneration(user.id, userEmail)
@@ -146,10 +159,10 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
       const vectorDocument = await getVectorDocument(documentId, user.id)
       if (!vectorDocument) throw new Error('VECTOR_DOCUMENT_NOT_FOUND')
       await reportProgress?.({
-        phase: 'retrieving', completed: 0, total: TOTAL_BATCHES, failed: 0, attempt: 1,
+        phase: 'retrieving', completed: 0, total: questionCount, failed: 0, attempt: 1,
         message: 'Selecionando fontes diferentes para cada questão...',
       })
-      questionContexts = await getDocumentQuestionContexts(vectorDocument, focusTopics)
+      questionContexts = await getDocumentQuestionContexts(vectorDocument, focusTopics, questionCount)
       chunkCount = await getVectorDocumentChunkCount(vectorDocument.id)
     } else {
       const buffer = uploadedBuffer!
@@ -165,7 +178,7 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
       pageCount = extracted.pageCount
       chunkCount = ephemeralContext.chunks.length
       questionContexts = new Map(
-        Array.from({ length: TOTAL_BATCHES }, (_, index) => [index + 1, {
+        Array.from({ length: questionCount }, (_, index) => [index + 1, {
           text: ephemeralContext.contextText,
           sources: [],
           pageWindow: { from: 1, to: extracted.pageCount },
@@ -190,6 +203,8 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
           focusTopics,
           domain: questionContext?.domain,
           retrievalObjective: questionContext?.objective,
+          totalQuestions: questionCount,
+          difficultyTarget,
           batch: {
             number: questionId,
             startId: questionId,
@@ -224,15 +239,15 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
           failureReasons.set(questionId, error instanceof Error ? error.message : 'Erro desconhecido')
         }
         await reportProgress?.({
-          phase: 'generating', completed: questionsById.size, total: TOTAL_BATCHES,
+          phase: 'generating', completed: questionsById.size, total: questionCount,
           failed: failedIds.length, attempt: currentGenerationAttempt,
-          message: `${questionsById.size} de ${TOTAL_BATCHES} questões concluídas`,
+          message: `${questionsById.size} de ${questionCount} questões concluídas`,
         })
       })
       return failedIds.sort((a, b) => a - b)
     }
 
-    let pendingIds = Array.from({ length: TOTAL_BATCHES }, (_, index) => index + 1)
+    let pendingIds = Array.from({ length: questionCount }, (_, index) => index + 1)
     for (let attempt = 1; attempt <= QUESTION_GENERATION_ATTEMPTS && pendingIds.length > 0; attempt += 1) {
       currentGenerationAttempt = attempt
       pendingIds = await generateQuestionIds(pendingIds)
@@ -245,7 +260,7 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
     for (let repair = 0; repair < DUPLICATE_REPAIR_ATTEMPTS; repair += 1) {
       const currentQuestions = Array.from(questionsById.values()).sort((a, b) => a.id - b.id)
       await reportProgress?.({
-        phase: 'deduplicating', completed: currentQuestions.length, total: TOTAL_BATCHES,
+        phase: 'deduplicating', completed: currentQuestions.length, total: questionCount,
         failed: 0, attempt: repair + 1, message: 'Verificando questões duplicadas...',
       })
       const duplicateIds = findDuplicateQuestionIds(currentQuestions).sort((a, b) => a - b)
@@ -264,25 +279,27 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
       throw new Error(`INVALID_AI_RESPONSE: questões duplicadas persistentes ${remainingDuplicates.join(', ')}`)
     }
 
-    if (generatedQuestions.length !== 30) {
-      throw new Error(`INVALID_AI_RESPONSE: Expected 30 questions, got ${generatedQuestions.length}`)
+    if (generatedQuestions.length !== questionCount) {
+      throw new Error(`INVALID_AI_RESPONSE: Expected ${questionCount} questions, got ${generatedQuestions.length}`)
     }
-    const quiz = quizSchema.parse({ titulo: quizTitle, total_questoes: 30, questoes: generatedQuestions })
+    const quiz = quizSchema.parse({ titulo: quizTitle, total_questoes: questionCount, questoes: generatedQuestions })
     const providerUsed = Array.from(providersUsed).join(' → ')
 
     await reportProgress?.({
-      phase: 'saving', completed: TOTAL_BATCHES, total: TOTAL_BATCHES,
+      phase: 'saving', completed: questionCount, total: questionCount,
       failed: 0, attempt: 1, message: 'Salvando simulado e fontes utilizadas...',
     })
     const saved = await prisma.simulado.create({
       data: {
         userId: user.id,
         titulo: quiz.titulo,
-        totalQuestoes: 30,
+        totalQuestoes: questionCount,
         temasFoco: focusTopics,
         pdfNome: pdfName,
         pdfHash,
         questoesJson: JSON.stringify(quiz.questoes),
+        difficultyTarget: difficultyTarget.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
+        ocrUsed,
       },
     })
 
@@ -291,7 +308,7 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
       provider: providerUsed,
       status: 'success',
       durationMs: Date.now() - startedAt,
-      metadata: { quizId: saved.id, pageCount, chunks: chunkCount, vectorBatching: Boolean(documentId) },
+      metadata: { quizId: saved.id, pageCount, chunks: chunkCount, vectorBatching: Boolean(documentId), questionCount, difficultyTarget, ocrUsed },
     })
     return NextResponse.json({ success: true, quizId: saved.id })
   } catch (error) {

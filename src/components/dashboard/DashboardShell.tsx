@@ -4,17 +4,18 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/components/providers'
 import { useState } from 'react'
-import { BarChart3, BookOpen, CalendarDays, CreditCard, FilePlus2, History, Home, LibraryBig, LogOut, Menu, ReceiptText, UserRound, Users, X } from 'lucide-react'
+import { BarChart3, BookOpen, CalendarDays, CreditCard, FilePlus2, History, Home, LibraryBig, LogOut, Menu, NotebookTabs, ReceiptText, UserRound, Users, X } from 'lucide-react'
 import { BrandLogo } from '@/components/shared/BrandLogo'
 
 const navigation = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
   { href: '/dashboard/novo', label: 'Novo Simulado', icon: FilePlus2 },
   { href: '/dashboard#historico', label: 'Meus Simulados', icon: History },
-  { href: '/dashboard#estatisticas', label: 'Estatísticas', icon: BarChart3 },
+  { href: '/dashboard/relatorios', label: 'Relatórios', icon: BarChart3 },
   { href: '/dashboard/materias', label: 'Matérias', icon: BookOpen },
   { href: '/dashboard/questoes', label: 'Banco de Questões', icon: LibraryBig },
   { href: '/dashboard/planos', label: 'Planos de Estudo', icon: CalendarDays },
+  { href: '/dashboard/caderno-erros', label: 'Caderno de erros', icon: NotebookTabs },
   { href: '/dashboard/assinatura', label: 'Minha assinatura', icon: CreditCard },
   { href: '/dashboard/perfil', label: 'Perfil', icon: UserRound },
 ]

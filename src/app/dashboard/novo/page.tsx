@@ -13,6 +13,8 @@ export default function NovoSimuladoPage() {
   const router = useRouter();
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [focusTopics, setFocusTopics] = useState('');
+  const [questionCount, setQuestionCount] = useState(30);
+  const [difficulty, setDifficulty] = useState<'Fácil' | 'Médio' | 'Avançado' | 'Misto'>('Misto');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState<GenerationProgress | null>(null);
   const [remaining, setRemaining] = useState<number | null>(null);
@@ -64,15 +66,18 @@ export default function NovoSimuladoPage() {
         const processed = await processPdfInBrowser(pdfFile, setPdfProgress);
         vectorDocumentId = processed.documentId;
         formData.append('documentId', processed.documentId);
+        formData.append('ocrUsed', String(processed.ocrPages > 0));
         setPdfProgress(null);
       } else {
         formData.append('file', pdfFile);
       }
       if (focusTopics.trim()) formData.append('focusTopics', focusTopics.trim());
+      formData.append('questionCount', String(questionCount));
+      formData.append('difficulty', difficulty);
 
       setGenerationProgress({
-        phase: 'retrieving', completed: 0, total: 30, failed: 0, attempt: 1,
-        message: 'Preparando fontes específicas para as 30 questões...',
+        phase: 'retrieving', completed: 0, total: questionCount, failed: 0, attempt: 1,
+        message: `Preparando fontes específicas para ${questionCount} questões...`,
       });
       const response = await fetch('/api/gerador', {
         method: 'POST',
@@ -117,10 +122,14 @@ export default function NovoSimuladoPage() {
             <label className="sr-only" htmlFor="focusTopics">Tópicos de foco</label>
             <textarea id="focusTopics" value={focusTopics} onChange={(event) => setFocusTopics(event.target.value.slice(0, 500))} rows={3} placeholder="Ex.: Princípios fundamentais, direitos e garantias, controle de constitucionalidade..." className="w-full border border-slate-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-600 resize-none" />
             <div className="flex justify-between mt-2 text-xs text-slate-600"><span>Separe os temas por vírgulas</span><span>{focusTopics.length}/500</span></div>
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <label className="text-sm font-bold text-slate-700">Quantidade de questões<select value={questionCount} onChange={(event) => setQuestionCount(Number(event.target.value))} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 font-medium"><option value={10}>10 questões</option><option value={20}>20 questões</option><option value={30}>30 questões</option><option value={40}>40 questões</option><option value={50}>50 questões</option></select></label>
+              <label className="text-sm font-bold text-slate-700">Dificuldade<select value={difficulty} onChange={(event) => setDifficulty(event.target.value as typeof difficulty)} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 font-medium"><option>Fácil</option><option>Médio</option><option>Avançado</option><option>Misto</option></select></label>
+            </div>
           </Step>
 
           <Step number={3} title="Confirmar e gerar" description="Seu simulado será criado com estas características.">
-            <div className="grid sm:grid-cols-2 gap-3 bg-slate-50 rounded-2xl p-5">{['30 questões','Somente múltipla escolha','4 alternativas por questão','Nível médio e avançado','Baseadas no conteúdo do PDF','Recuperação automática de falhas'].map((item) => <div key={item} className="flex items-center gap-2 text-sm font-semibold"><span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center"><Check className="w-3.5 h-3.5" /></span>{item}</div>)}</div>
+            <div className="grid sm:grid-cols-2 gap-3 bg-slate-50 rounded-2xl p-5">{[`${questionCount} questões`,'Somente múltipla escolha','4 alternativas por questão',`Dificuldade: ${difficulty}`,'Baseadas no conteúdo do PDF','OCR automático para páginas digitalizadas'].map((item) => <div key={item} className="flex items-center gap-2 text-sm font-semibold"><span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center"><Check className="w-3.5 h-3.5" /></span>{item}</div>)}</div>
           </Step>
 
           <div className="p-6 bg-slate-50 border-t border-slate-200">

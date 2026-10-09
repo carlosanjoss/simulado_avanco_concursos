@@ -30,15 +30,16 @@ export async function POST(request: NextRequest) {
   })
   if (!simulado) return NextResponse.json({ error: 'Simulado não encontrado' }, { status: 404 })
 
-  const question = (JSON.parse(simulado.questoesJson) as Question[])
+  const questions = JSON.parse(simulado.questoesJson) as Question[]
+  const question = questions
     .find((item) => item.id === body.questionId)
   if (!question) return NextResponse.json({ error: 'Questão não encontrada' }, { status: 404 })
 
   const activeKey = `${user.id}:${body.simuladoId}`
   const existing = await prisma.tentativa.findUnique({ where: { activeKey } })
   const answers = existing ? JSON.parse(existing.respostas) as Record<string, string> : {}
-  const firstUnanswered = Array.from({ length: 30 }, (_, index) => index + 1)
-    .find((id) => answers[id] === undefined) ?? 31
+  const firstUnanswered = Array.from({ length: questions.length }, (_, index) => index + 1)
+    .find((id) => answers[id] === undefined) ?? questions.length + 1
   if (body.questionId > firstUnanswered) {
     return NextResponse.json({ error: 'Responda as questões anteriores primeiro.' }, { status: 409 })
   }
@@ -55,14 +56,14 @@ export async function POST(request: NextRequest) {
       respostas: JSON.stringify(answers),
       selectedAnswers: JSON.stringify(answers),
       pontuacao: 0,
-      totalQuestoes: 30,
+      totalQuestoes: questions.length,
       percentual: 0,
-      currentIndex: Math.min(body.questionId - 1, 29),
+      currentIndex: Math.min(body.questionId - 1, questions.length - 1),
     },
     update: {
       respostas: JSON.stringify(answers),
       selectedAnswers: JSON.stringify(answers),
-      currentIndex: Math.min(body.questionId - 1, 29),
+      currentIndex: Math.min(body.questionId - 1, questions.length - 1),
     },
   })
   await prisma.simulado.update({ where: { id: body.simuladoId }, data: { status: 'EM_ANDAMENTO' } })

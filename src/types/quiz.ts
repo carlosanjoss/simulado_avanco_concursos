@@ -1,5 +1,5 @@
 export type QuestionType = 'multipla_escolha' | 'certo_errado' | 'discursiva';
-export type QuestionDifficulty = 'Médio' | 'Avançado';
+export type QuestionDifficulty = 'Fácil' | 'Médio' | 'Avançado';
 
 export interface QuestionSource {
   chunkId: string;
@@ -31,7 +31,7 @@ export interface QuestionEvaluation {
 
 export interface Quiz {
   titulo: string;
-  total_questoes: 30;
+  total_questoes: number;
   questoes: Question[];
 }
 

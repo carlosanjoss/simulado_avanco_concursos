@@ -79,7 +79,7 @@ function buildInviteEmail(inviteUrl: string, recipientName?: string) {
         <tr><td style="padding:32px;">
           <p style="margin:0 0 16px;font-size:17px;color:#06183d;font-weight:700;">${greeting}</p>
           <p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:#334155;">
-            Você foi convidado para testar o <strong>Avanço Simulados</strong> — a plataforma que transforma seus PDFs de estudo em simulados de 30 questões com correção e justificativa detalhada.
+            Você foi convidado para testar o <strong>Avanço Simulados</strong> — a plataforma que transforma seus PDFs de estudo em simulados personalizados com correção e justificativa detalhada.
           </p>
           <p style="margin:0 0 24px;font-size:15px;line-height:1.65;color:#334155;">
             Para começar, clique no botão abaixo e crie sua senha de acesso. O link é pessoal e expira em <strong>7 dias</strong>.
