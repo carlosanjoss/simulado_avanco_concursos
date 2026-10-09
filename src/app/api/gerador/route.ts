@@ -49,6 +49,7 @@ function sanitizeFocus(value: FormDataEntryValue | null) {
 }
 
 function allocateQuestions(total: number, documentIds: string[], weights: Record<string, number>): number[] {
+  if (documentIds.length === 0) return []
   if (documentIds.length === 1) return [total]
   const safeWeights = documentIds.map((id) => Math.max(1, Math.min(100, weights[id] || 1)))
   const remaining = total - documentIds.length
