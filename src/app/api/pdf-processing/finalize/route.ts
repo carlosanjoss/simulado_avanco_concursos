@@ -7,7 +7,7 @@ import { isSupabaseVectorConfigured } from '@/lib/supabase-admin';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const finalizeSchema = z.object({ documentId: z.string().uuid() }).strict();
+const finalizeSchema = z.object({ documentId: z.string().uuid(), ocrPages: z.number().int().min(0).max(400).default(0) }).strict();
 
 export async function POST(request: NextRequest) {
   if (process.env.NEXT_PHASE === 'phase-production-build') {
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   try {
     const document = await getVectorDocument(parsed.data.documentId, userId);
     if (!document) return NextResponse.json({ error: 'Documento não encontrado' }, { status: 404 });
-    const result = await finalizeVectorDocument(document);
+    const result = await finalizeVectorDocument(document, parsed.data.ocrPages);
     return NextResponse.json({ success: true, documentId: document.id, ...result });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';

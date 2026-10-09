@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
   try {
     const document = await getVectorDocument(documentId, userId);
     if (!document) return NextResponse.json({ error: 'Documento não encontrado' }, { status: 404 });
-    if (new Date(document.expires_at).getTime() <= Date.now()) {
+    if (document.expires_at && new Date(document.expires_at).getTime() <= Date.now()) {
       return NextResponse.json({ error: 'A sessão de processamento expirou.' }, { status: 410 });
     }
     if (batchIndex >= document.total_batches) {

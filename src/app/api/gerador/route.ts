@@ -21,6 +21,7 @@ import {
   getDocumentQuestionContexts,
   getVectorDocument,
   getVectorDocumentChunkCount,
+  markVectorMaterialUsed,
 } from '@/lib/document-vector-store'
 import type { RetrievedQuestionContext } from '@/lib/document-vector-store'
 import type { Question } from '@/types/quiz'
@@ -164,6 +165,7 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
       })
       questionContexts = await getDocumentQuestionContexts(vectorDocument, focusTopics, questionCount)
       chunkCount = await getVectorDocumentChunkCount(vectorDocument.id)
+      await markVectorMaterialUsed(vectorDocument.id, user.id)
     } else {
       const buffer = uploadedBuffer!
       let extracted
@@ -298,6 +300,7 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
         pdfNome: pdfName,
         pdfHash,
         questoesJson: JSON.stringify(quiz.questoes),
+        sourceDocumentId: documentId,
         difficultyTarget: difficultyTarget.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
         ocrUsed,
       },

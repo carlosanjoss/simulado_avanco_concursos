@@ -38,7 +38,23 @@ export interface VectorDocument {
   total_batches: number;
   processed_batches: number;
   status: 'pending' | 'processing' | 'ready' | 'failed';
-  expires_at: string;
+  expires_at: string | null;
+  ocr_pages: number;
+  archived_at: string | null;
+  last_used_at: string | null;
+}
+
+export interface MaterialSummary {
+  id: string;
+  fileName: string;
+  fileSize: number;
+  totalPages: number;
+  ocrPages: number;
+  status: VectorDocument['status'];
+  archivedAt: string | null;
+  lastUsedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface RetrievedQuestionContext {
@@ -119,7 +135,8 @@ export async function createVectorDocument(input: {
     .select('*')
     .eq('user_id', input.userId)
     .eq('file_hash', input.fileHash)
-    .gt('expires_at', new Date().toISOString())
+    .is('archived_at', null)
+    .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -231,7 +248,7 @@ export async function processVectorBatch(input: {
   return { chunks: rows.length, alreadyProcessed: false };
 }
 
-export async function finalizeVectorDocument(document: VectorDocument): Promise<{ chunkCount: number }> {
+export async function finalizeVectorDocument(document: VectorDocument, ocrPages = 0): Promise<{ chunkCount: number }> {
   const supabase = await getSupabaseAdmin();
   const { count: batchCount, error: batchError } = await supabase
     .from('simulado_batches')
@@ -250,11 +267,49 @@ export async function finalizeVectorDocument(document: VectorDocument): Promise<
 
   const { error: updateError } = await supabase
     .from('simulado_documents')
-    .update({ status: 'ready', processed_batches: batchCount, updated_at: new Date().toISOString() })
+    .update({ status: 'ready', processed_batches: batchCount, ocr_pages: ocrPages, expires_at: null, updated_at: new Date().toISOString() })
     .eq('id', document.id)
     .eq('user_id', document.user_id);
   assertSupabaseResult(updateError, 'VECTOR_DOCUMENT_FINALIZE_FAILED');
   return { chunkCount };
+}
+
+export async function listVectorMaterials(userId: string, includeArchived = false): Promise<MaterialSummary[]> {
+  let query = (await getSupabaseAdmin())
+    .from('simulado_documents')
+    .select('id,file_name,file_size,total_pages,ocr_pages,status,archived_at,last_used_at,created_at,updated_at')
+    .eq('user_id', userId)
+    .eq('status', 'ready')
+    .order('updated_at', { ascending: false });
+  if (!includeArchived) query = query.is('archived_at', null);
+  const { data, error } = await query;
+  assertSupabaseResult(error, 'VECTOR_MATERIAL_LIST_FAILED');
+  return (data || []).map((item) => ({
+    id: item.id,
+    fileName: item.file_name,
+    fileSize: item.file_size,
+    totalPages: item.total_pages,
+    ocrPages: item.ocr_pages || 0,
+    status: item.status,
+    archivedAt: item.archived_at,
+    lastUsedAt: item.last_used_at,
+    createdAt: item.created_at,
+    updatedAt: item.updated_at,
+  })) as MaterialSummary[];
+}
+
+export async function updateVectorMaterial(documentId: string, userId: string, data: { fileName?: string; archived?: boolean }): Promise<void> {
+  const update: Record<string, string | null> = { updated_at: new Date().toISOString() };
+  if (data.fileName !== undefined) update.file_name = data.fileName;
+  if (data.archived !== undefined) update.archived_at = data.archived ? new Date().toISOString() : null;
+  const { error } = await (await getSupabaseAdmin()).from('simulado_documents').update(update).eq('id', documentId).eq('user_id', userId).eq('status', 'ready');
+  assertSupabaseResult(error, 'VECTOR_MATERIAL_UPDATE_FAILED');
+}
+
+export async function markVectorMaterialUsed(documentId: string, userId: string): Promise<void> {
+  const now = new Date().toISOString();
+  const { error } = await (await getSupabaseAdmin()).from('simulado_documents').update({ last_used_at: now, updated_at: now }).eq('id', documentId).eq('user_id', userId);
+  assertSupabaseResult(error, 'VECTOR_MATERIAL_USE_FAILED');
 }
 
 export async function getDocumentQuestionContexts(

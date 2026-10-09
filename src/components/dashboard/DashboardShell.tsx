@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/components/providers'
 import { useState } from 'react'
-import { BarChart3, BookOpen, CalendarDays, CreditCard, FilePlus2, History, Home, LibraryBig, LogOut, Menu, NotebookTabs, ReceiptText, UserRound, Users, X } from 'lucide-react'
+import { BarChart3, BookOpen, CalendarDays, CreditCard, FilePlus2, Files, History, Home, LibraryBig, LogOut, Menu, NotebookTabs, ReceiptText, UserRound, Users, X } from 'lucide-react'
 import { BrandLogo } from '@/components/shared/BrandLogo'
 
 const navigation = [
@@ -13,6 +13,7 @@ const navigation = [
   { href: '/dashboard#historico', label: 'Meus Simulados', icon: History },
   { href: '/dashboard/relatorios', label: 'Relatórios', icon: BarChart3 },
   { href: '/dashboard/materias', label: 'Matérias', icon: BookOpen },
+  { href: '/dashboard/materiais', label: 'Meus materiais', icon: Files },
   { href: '/dashboard/questoes', label: 'Banco de Questões', icon: LibraryBig },
   { href: '/dashboard/planos', label: 'Planos de Estudo', icon: CalendarDays },
   { href: '/dashboard/caderno-erros', label: 'Caderno de erros', icon: NotebookTabs },

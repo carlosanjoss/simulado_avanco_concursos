@@ -4,6 +4,7 @@ import { getAuthenticatedUser } from '@/lib/server-auth';
 import {
   createVectorDocument,
   deleteVectorDocument,
+  getVectorDocumentChunkCount,
   PDF_PAGE_BATCH_SIZE,
   vectorStoreMetadata,
 } from '@/lib/document-vector-store';
@@ -43,11 +44,15 @@ export async function POST(request: NextRequest) {
 
   try {
     const document = await createVectorDocument({ userId, ...parsed.data });
+    const reused = document.status === 'ready';
     return NextResponse.json({
       success: true,
       documentId: document.id,
       batchSize: vectorStoreMetadata.batchSize,
       expiresAt: document.expires_at,
+      reused,
+      ocrPages: document.ocr_pages || 0,
+      chunkCount: reused ? await getVectorDocumentChunkCount(document.id) : 0,
     });
   } catch (error) {
     console.error('PDF batch session failed:', error instanceof Error ? error.message : 'Erro desconhecido');

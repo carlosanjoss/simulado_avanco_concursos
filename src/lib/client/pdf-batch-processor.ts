@@ -73,7 +73,7 @@ export async function processPdfInBrowser(
   }
   const totalBatches = Math.ceil(totalPages / PAGE_BATCH_SIZE);
 
-  const session = await requestJson<{ documentId: string }>('/api/pdf-processing/session', {
+  const session = await requestJson<{ documentId: string; reused?: boolean; ocrPages?: number; chunkCount?: number }>('/api/pdf-processing/session', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -84,6 +84,12 @@ export async function processPdfInBrowser(
       totalBatches,
     }),
   });
+
+  if (session.reused) {
+    await loadingTask.destroy();
+    onProgress({ phase: 'finalizing', currentPage: totalPages, totalPages, currentBatch: totalBatches, totalBatches, message: 'Material encontrado na biblioteca. Reutilizando o processamento existente...' });
+    return { documentId: session.documentId, totalPages, chunkCount: session.chunkCount || 0, ocrPages: session.ocrPages || 0 };
+  }
 
   let documentId = session.documentId;
   let ocrWorker: { recognize(image: HTMLCanvasElement): Promise<{ data: { text: string } }>; terminate(): Promise<unknown> } | null = null;
@@ -155,7 +161,7 @@ export async function processPdfInBrowser(
     const completed = await requestJson<{ chunkCount: number }>('/api/pdf-processing/finalize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ documentId }),
+      body: JSON.stringify({ documentId, ocrPages }),
     });
     if (ocrWorker) await ocrWorker.terminate();
     await loadingTask.destroy();

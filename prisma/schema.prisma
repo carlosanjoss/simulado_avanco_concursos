@@ -114,6 +114,7 @@ model Simulado {
   pdfNome       String
   pdfHash       String
   questoesJson  String
+  sourceDocumentId String?
   difficultyTarget String         @default("MISTO")
   ocrUsed       Boolean            @default(false)
   status        String             @default("NAO_INICIADO")
@@ -128,6 +129,7 @@ model Simulado {
   @@index([userId])
   @@index([createdAt])
   @@index([pdfHash])
+  @@index([sourceDocumentId])
 }
 
 model StudyPlanProgress {
