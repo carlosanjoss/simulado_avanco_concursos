@@ -112,9 +112,11 @@ function selectPageDiverseMatches(matches: MatchedChunk[]): MatchedChunk[] {
   return selected;
 }
 
-function toSource(match: MatchedChunk): QuestionSource {
+function toSource(match: MatchedChunk, document: VectorDocument): QuestionSource {
   return {
     chunkId: String(match.id),
+    documentId: document.id,
+    documentName: document.file_name,
     pageNumber: match.page_number,
     excerpt: match.text_content.slice(0, 600),
     similarity: Math.round(match.similarity * 10_000) / 10_000,
@@ -371,7 +373,7 @@ export async function getDocumentQuestionContexts(
       .join('\n\n');
     contexts.set(index + 1, {
       text,
-      sources: ordered.map(toSource),
+      sources: ordered.map((match) => toSource(match, document)),
       pageWindow: plan.pageWindow,
       objective: plan.objective,
       domain: looksMathematical(text) ? 'mathematics' : 'general',

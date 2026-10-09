@@ -24,6 +24,7 @@ import {
   markVectorMaterialUsed,
 } from '@/lib/document-vector-store'
 import type { RetrievedQuestionContext } from '@/lib/document-vector-store'
+import type { VectorDocument } from '@/lib/document-vector-store'
 import type { Question } from '@/types/quiz'
 import { getAuthenticatedUser } from '@/lib/server-auth'
 
@@ -45,6 +46,19 @@ function errorResponse(code: ErrorCode, message: string, status: number) {
 function sanitizeFocus(value: FormDataEntryValue | null) {
   if (typeof value !== 'string') return undefined
   return value.slice(0, MAX_FOCUS_LENGTH).replace(/[<>\"'`]/g, '').trim() || undefined
+}
+
+function allocateQuestions(total: number, documentIds: string[], weights: Record<string, number>): number[] {
+  if (documentIds.length === 1) return [total]
+  const safeWeights = documentIds.map((id) => Math.max(1, Math.min(100, weights[id] || 1)))
+  const remaining = total - documentIds.length
+  const weightTotal = safeWeights.reduce((sum, weight) => sum + weight, 0)
+  const raw = safeWeights.map((weight) => remaining * weight / weightTotal)
+  const allocations = raw.map((value) => 1 + Math.floor(value))
+  let pending = total - allocations.reduce((sum, value) => sum + value, 0)
+  const priority = raw.map((value, index) => ({ index, fraction: value - Math.floor(value) })).sort((a, b) => b.fraction - a.fraction)
+  for (let index = 0; index < pending; index += 1) allocations[priority[index].index] += 1
+  return allocations
 }
 
 export interface GenerationProgressEvent {
@@ -103,9 +117,34 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
     const formData = await request.formData()
     const fileEntry = formData.get('file') ?? formData.get('pdf')
     const documentIdEntry = formData.get('documentId')
-    const documentId = typeof documentIdEntry === 'string' && /^[0-9a-f-]{36}$/i.test(documentIdEntry)
-      ? documentIdEntry
-      : undefined
+    const documentIdsEntry = formData.get('documentIds')
+    let documentIds: string[] = []
+    if (typeof documentIdsEntry === 'string' && documentIdsEntry) {
+      try {
+        const parsed = JSON.parse(documentIdsEntry)
+        if (!Array.isArray(parsed) || parsed.some((value) => typeof value !== 'string')) throw new Error('INVALID_DOCUMENT_IDS')
+        documentIds = parsed as string[]
+      } catch {
+        return errorResponse('VECTOR_DOCUMENT_ERROR', 'A seleção de materiais é inválida.', 400)
+      }
+    } else if (typeof documentIdEntry === 'string') {
+      documentIds = [documentIdEntry]
+    }
+    documentIds = Array.from(new Set(documentIds))
+    if (documentIds.length > 5 || documentIds.some((id) => !/^[0-9a-f-]{36}$/i.test(id))) {
+      return errorResponse('VECTOR_DOCUMENT_ERROR', 'Selecione no máximo cinco materiais válidos.', 400)
+    }
+    let materialWeights: Record<string, number> = {}
+    const materialWeightsEntry = formData.get('materialWeights')
+    if (typeof materialWeightsEntry === 'string' && materialWeightsEntry) {
+      try {
+        const parsed = JSON.parse(materialWeightsEntry) as Record<string, unknown>
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || Object.entries(parsed).some(([id, value]) => !documentIds.includes(id) || typeof value !== 'number' || !Number.isFinite(value) || value < 1 || value > 100)) throw new Error('INVALID_MATERIAL_WEIGHTS')
+        materialWeights = parsed as Record<string, number>
+      } catch {
+        return errorResponse('VECTOR_DOCUMENT_ERROR', 'A distribuição entre materiais é inválida.', 400)
+      }
+    }
     const focusTopics = sanitizeFocus(formData.get('focusTopics') ?? formData.get('temasFoco'))
     const requestedCount = Number(formData.get('questionCount') || 30)
     if (!ALLOWED_QUESTION_COUNTS.has(requestedCount)) {
@@ -117,9 +156,9 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
     }
     const questionCount = requestedCount
     const difficultyTarget = requestedDifficulty as 'Fácil' | 'Médio' | 'Avançado' | 'Misto'
-    const ocrUsed = formData.get('ocrUsed') === 'true'
-    if (!documentId && !(fileEntry instanceof File)) {
-      return errorResponse('INVALID_FILE', 'Selecione um arquivo PDF.', 400)
+    let ocrUsed = formData.get('ocrUsed') === 'true'
+    if (!documentIds.length && !(fileEntry instanceof File)) {
+      return errorResponse('INVALID_FILE', 'Selecione ao menos um material ou arquivo PDF.', 400)
     }
 
     let pdfHash = ''
@@ -128,15 +167,20 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
     let chunkCount = 0
     let questionContexts = new Map<number, RetrievedQuestionContext>()
     let uploadedBuffer: Buffer | undefined
+    let vectorDocuments: VectorDocument[] = []
 
-    if (documentId) {
-      const vectorDocument = await getVectorDocument(documentId, user.id)
-      if (!vectorDocument || vectorDocument.status !== 'ready') {
-        return errorResponse('VECTOR_DOCUMENT_ERROR', 'O processamento do PDF não foi concluído.', 409)
+    if (documentIds.length) {
+      const loadedDocuments = await Promise.all(documentIds.map((id) => getVectorDocument(id, user.id)))
+      if (loadedDocuments.some((document) => !document || document.status !== 'ready')) {
+        return errorResponse('VECTOR_DOCUMENT_ERROR', 'Um ou mais materiais não estão disponíveis.', 409)
       }
-      pdfHash = createHash('sha256').update(vectorDocument.file_hash).update(focusTopics || '').update(String(questionCount)).update(difficultyTarget).digest('hex')
-      pdfName = vectorDocument.file_name
-      pageCount = vectorDocument.total_pages
+      vectorDocuments = loadedDocuments as VectorDocument[]
+      ocrUsed = vectorDocuments.some((document) => document.ocr_pages > 0)
+      const combinedHash = createHash('sha256')
+      vectorDocuments.forEach((document) => combinedHash.update(document.file_hash))
+      pdfHash = combinedHash.update(focusTopics || '').update(String(questionCount)).update(difficultyTarget).digest('hex')
+      pdfName = vectorDocuments.map((document) => document.file_name).join(' + ')
+      pageCount = vectorDocuments.reduce((sum, document) => sum + document.total_pages, 0)
     } else {
       const pdfFile = fileEntry as File
       const fileValidation = validatePDFFile(pdfFile)
@@ -156,16 +200,25 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
     usageReserved = await reserveMonthlyGeneration(user.id, userEmail)
     if (!usageReserved) return errorResponse('MONTHLY_LIMIT_REACHED', 'Você atingiu o limite mensal do seu plano.', 429)
 
-    if (documentId) {
-      const vectorDocument = await getVectorDocument(documentId, user.id)
-      if (!vectorDocument) throw new Error('VECTOR_DOCUMENT_NOT_FOUND')
+    if (vectorDocuments.length) {
       await reportProgress?.({
         phase: 'retrieving', completed: 0, total: questionCount, failed: 0, attempt: 1,
-        message: 'Selecionando fontes diferentes para cada questão...',
+        message: `Distribuindo questões entre ${vectorDocuments.length} material(is)...`,
       })
-      questionContexts = await getDocumentQuestionContexts(vectorDocument, focusTopics, questionCount)
-      chunkCount = await getVectorDocumentChunkCount(vectorDocument.id)
-      await markVectorMaterialUsed(vectorDocument.id, user.id)
+      let globalQuestionId = 1
+      const allocations = allocateQuestions(questionCount, documentIds, materialWeights)
+      for (let documentIndex = 0; documentIndex < vectorDocuments.length; documentIndex += 1) {
+        const document = vectorDocuments[documentIndex]
+        const allocatedCount = allocations[documentIndex]
+        const localContexts = await getDocumentQuestionContexts(document, focusTopics, allocatedCount)
+        for (let localId = 1; localId <= allocatedCount; localId += 1) {
+          const context = localContexts.get(localId)
+          if (context) questionContexts.set(globalQuestionId, context)
+          globalQuestionId += 1
+        }
+        chunkCount += await getVectorDocumentChunkCount(document.id)
+        await markVectorMaterialUsed(document.id, user.id)
+      }
     } else {
       const buffer = uploadedBuffer!
       let extracted
@@ -300,7 +353,8 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
         pdfNome: pdfName,
         pdfHash,
         questoesJson: JSON.stringify(quiz.questoes),
-        sourceDocumentId: documentId,
+        sourceDocumentId: documentIds[0],
+        materials: vectorDocuments.length ? { create: vectorDocuments.map((document) => ({ documentId: document.id, fileName: document.file_name })) } : undefined,
         difficultyTarget: difficultyTarget.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
         ocrUsed,
       },
@@ -311,7 +365,7 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
       provider: providerUsed,
       status: 'success',
       durationMs: Date.now() - startedAt,
-      metadata: { quizId: saved.id, pageCount, chunks: chunkCount, vectorBatching: Boolean(documentId), questionCount, difficultyTarget, ocrUsed },
+      metadata: { quizId: saved.id, pageCount, chunks: chunkCount, vectorBatching: vectorDocuments.length > 0, materialCount: vectorDocuments.length, documentIds, materialWeights, questionCount, difficultyTarget, ocrUsed },
     })
     return NextResponse.json({ success: true, quizId: saved.id })
   } catch (error) {

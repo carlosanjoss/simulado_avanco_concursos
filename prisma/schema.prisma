@@ -123,6 +123,7 @@ model Simulado {
   tentativas    Tentativa[]
   feedbacks     QuestionFeedback[]
   reviewCards   ReviewCard[]
+  materials     SimuladoMaterial[]
   deletedAt     DateTime?
 
   @@index([userId, pdfHash])
@@ -130,6 +131,19 @@ model Simulado {
   @@index([createdAt])
   @@index([pdfHash])
   @@index([sourceDocumentId])
+}
+
+model SimuladoMaterial {
+  id         String   @id @default(cuid())
+  simuladoId String
+  simulado   Simulado @relation(fields: [simuladoId], references: [id], onDelete: Cascade)
+  documentId String
+  fileName   String
+  createdAt  DateTime @default(now())
+
+  @@unique([simuladoId, documentId])
+  @@index([documentId])
+  @@index([simuladoId])
 }
 
 model StudyPlanProgress {

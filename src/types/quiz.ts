@@ -3,6 +3,8 @@ export type QuestionDifficulty = 'Fácil' | 'Médio' | 'Avançado';
 
 export interface QuestionSource {
   chunkId: string;
+  documentId?: string;
+  documentName?: string;
   pageNumber: number;
   excerpt: string;
   similarity: number;

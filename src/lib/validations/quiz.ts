@@ -8,6 +8,8 @@ const baseQuestion = {
   dificuldade: z.enum(['Fácil', 'Médio', 'Avançado']),
   sources: z.array(z.object({
     chunkId: z.string().min(1),
+    documentId: z.string().uuid().optional(),
+    documentName: z.string().min(1).max(255).optional(),
     pageNumber: z.number().int().positive(),
     excerpt: z.string().min(1).max(600),
     similarity: z.number().min(-1).max(1),

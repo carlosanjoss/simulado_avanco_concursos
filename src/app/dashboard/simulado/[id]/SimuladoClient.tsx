@@ -259,7 +259,7 @@ function SourceEvidence({ sources }: { sources?: QuestionEvaluation['sources'] }
   if (!sources?.length) return null;
   const pages = Array.from(new Set(sources.map((source) => source.pageNumber))).sort((a, b) => a - b);
   const strongest = [...sources].sort((a, b) => b.similarity - a.similarity)[0];
-  return <details className="mt-4 rounded-xl border border-blue-200 bg-white/70 p-4"><summary className="cursor-pointer list-none font-bold text-sm text-blue-900 flex items-center gap-2"><BookOpenCheck className="w-4 h-4" /> Comprovação no PDF • {pages.length === 1 ? 'página' : 'páginas'} {pages.join(', ')}</summary><div className="mt-3 text-sm text-slate-700"><p className="leading-relaxed">“{strongest.excerpt}”</p><p className="mt-2 text-xs text-slate-500">Chunk {strongest.chunkId} • similaridade {(strongest.similarity * 100).toFixed(1)}%</p></div></details>;
+  return <details className="mt-4 rounded-xl border border-blue-200 bg-white/70 p-4"><summary className="cursor-pointer list-none font-bold text-sm text-blue-900 flex items-center gap-2"><BookOpenCheck className="w-4 h-4" /> Comprovação • {strongest.documentName ? `${strongest.documentName} · ` : ''}{pages.length === 1 ? 'página' : 'páginas'} {pages.join(', ')}</summary><div className="mt-3 text-sm text-slate-700"><p className="leading-relaxed">“{strongest.excerpt}”</p><p className="mt-2 text-xs text-slate-500">Chunk {strongest.chunkId} • similaridade {(strongest.similarity * 100).toFixed(1)}%</p></div></details>;
 }
 
 function QuestionNavigator({ questions, currentIndex, confirmedAnswers, onSelect, vertical = false }: { questions: PublicQuestion[]; currentIndex: number; confirmedAnswers: Record<number, string>; onSelect: (index: number) => void; vertical?: boolean }) {

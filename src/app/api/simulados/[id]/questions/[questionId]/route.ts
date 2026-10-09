@@ -56,7 +56,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const current = questions.find((item) => item.id === Number(questionId))
   if (!current) return NextResponse.json({ error: 'Questão não encontrada' }, { status: 404 })
   const sources = current.sources || []
-  const sourceContext = sources.length ? sources.map((source) => `[Página ${source.pageNumber}] ${source.excerpt}`).join('\n\n') : `${current.enunciado}\n${current.justificativa}`
+  const sourceContext = sources.length ? sources.map((source) => `[${source.documentName || 'Material'} · Página ${source.pageNumber}] ${source.excerpt}`).join('\n\n') : `${current.enunciado}\n${current.justificativa}`
   const difficulty = ({ FACIL: 'Fácil', MEDIO: 'Médio', AVANCADO: 'Avançado', MISTO: 'Misto' } as const)[owned.simulado.difficultyTarget as 'FACIL' | 'MEDIO' | 'AVANCADO' | 'MISTO'] || 'Misto'
   const prompts = buildQuizPrompts({ context: sourceContext, focusTopics: current.tema, totalQuestions: owned.simulado.totalQuestoes, difficultyTarget: difficulty, batch: { number: current.id, startId: current.id, endId: current.id, previousQuestions: questions.filter((item) => item.id !== current.id).map((item) => item.enunciado) } })
   try {
