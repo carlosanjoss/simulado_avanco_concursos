@@ -1,11 +1,12 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { BookOpen, ChevronRight, FileText, Layers3 } from 'lucide-react'
+import { BookOpen, FileText, Layers3 } from 'lucide-react'
 import DashboardShell from '@/components/dashboard/DashboardShell'
 import { prisma } from '@/lib/prisma'
 import type { Question } from '@/types/quiz'
 import { getAuthenticatedUserFromCookie } from '@/lib/server-auth'
 import { headers } from 'next/headers'
+import SubjectsGridClient from './SubjectsGridClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,7 +45,7 @@ export default async function MateriasPage() {
       <Summary icon={FileText} value={simulados.length} label="Materiais processados" />
       <Summary icon={Layers3} value={orderedSubjects.reduce((sum, [, item]) => sum + item.questions, 0)} label="Questões disponíveis" />
     </div>
-    {orderedSubjects.length ? <section className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 mt-7">{orderedSubjects.map(([label, item], index) => <article key={label} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><span className="w-11 h-11 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center"><BookOpen className="w-5 h-5" /></span><span className="text-xs font-bold text-slate-500">{String(index + 1).padStart(2, '0')}</span></div><h2 className="font-black text-lg mt-4">{label}</h2><p className="text-sm text-slate-600 mt-1">{item.questions} questões em {item.simulations.size} simulado{item.simulations.size === 1 ? '' : 's'}</p><Link href={`/dashboard/simulado/${item.latestQuizId}`} className="mt-5 inline-flex items-center gap-1 text-sm font-black text-blue-700">Estudar matéria <ChevronRight className="w-4 h-4" /></Link></article>)}</section> : <EmptyState />}
+    {orderedSubjects.length ? <SubjectsGridClient subjects={orderedSubjects.map(([label, item]) => ({ label, questions: item.questions, simulations: item.simulations.size, latestQuizId: item.latestQuizId }))} /> : <EmptyState />}
   </div></DashboardShell>
 }
 

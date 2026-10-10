@@ -3,7 +3,8 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useAuth } from '@/components/providers'
-import { ArrowRight, BarChart3, CheckCircle2, Clock3, FilePlus2, FileText, Pencil, Play, RefreshCw, Target } from 'lucide-react'
+import { useState } from 'react'
+import { ArrowRight, BarChart3, CheckCircle2, ChevronLeft, ChevronRight, Clock3, FilePlus2, FileText, Pencil, Play, RefreshCw, Target } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import DashboardShell from '../../components/dashboard/DashboardShell'
@@ -37,6 +38,10 @@ function getQuestionText(simulado: Simulado, completed: boolean, inProgress: boo
 
 export default function DashboardClient({ simulados, stats }: DashboardClientProps) {
   const { user } = useAuth()
+  const [historyPage, setHistoryPage] = useState(1)
+  const historyPageSize = 5
+  const historyPageCount = Math.max(1, Math.ceil(simulados.length / historyPageSize))
+  const visibleSimulados = simulados.slice((historyPage - 1) * historyPageSize, historyPage * historyPageSize)
 
   const statCards = [
     { label: 'Simulados realizados', value: stats.completed, icon: FileText, color: 'text-blue-700 bg-blue-50' },
@@ -120,7 +125,7 @@ export default function DashboardClient({ simulados, stats }: DashboardClientPro
               </Link>
             </div>
           ) : (
-            <div className="divide-y divide-slate-100">{simulados.map((simulado) => <HistoryRow key={simulado.id} simulado={simulado} />)}</div>
+            <><div className="divide-y divide-slate-100">{visibleSimulados.map((simulado) => <HistoryRow key={simulado.id} simulado={simulado} />)}</div>{historyPageCount > 1 && <div className="flex items-center justify-center gap-3 border-t border-slate-200 bg-slate-50 px-4 py-4"><button type="button" onClick={() => setHistoryPage((page) => Math.max(1, page - 1))} disabled={historyPage === 1} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold disabled:opacity-40"><ChevronLeft className="h-4 w-4" /> Anterior</button><span className="text-sm font-bold text-slate-600">Página {historyPage} de {historyPageCount}</span><button type="button" onClick={() => setHistoryPage((page) => Math.min(historyPageCount, page + 1))} disabled={historyPage === historyPageCount} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold disabled:opacity-40">Próxima <ChevronRight className="h-4 w-4" /></button></div>}</>
           )}
         </section>
 

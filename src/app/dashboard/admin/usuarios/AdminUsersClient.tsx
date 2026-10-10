@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Search, Shield, Trash2, UserCheck, UserX, RotateCcw, LogOut, MailX } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Search, Shield, Trash2, UserCheck, UserX, RotateCcw, LogOut, MailX } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/components/providers'
 import AdminEngagementPanels from './AdminEngagementPanels'
@@ -30,6 +30,11 @@ export default function AdminUsersClient() {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [invitePage, setInvitePage] = useState(1)
+  const invitePageSize = 5
+  const invitePageCount = Math.max(1, Math.ceil(invites.length / invitePageSize))
+  const currentInvitePage = Math.min(invitePage, invitePageCount)
+  const visibleInvites = invites.slice((currentInvitePage - 1) * invitePageSize, currentInvitePage * invitePageSize)
 
   const loadUsers = useCallback(async () => {
     setLoading(true)
@@ -132,7 +137,7 @@ export default function AdminUsersClient() {
         <div className="px-5 py-4 border-t border-slate-200 flex items-center justify-between"><button disabled={page <= 1} onClick={() => setPage((value) => value - 1)} className="rounded-lg border px-4 py-2 font-bold disabled:opacity-40">Anterior</button><span className="text-sm text-slate-500">Página {page} de {pages}</span><button disabled={page >= pages} onClick={() => setPage((value) => value + 1)} className="rounded-lg border px-4 py-2 font-bold disabled:opacity-40">Próxima</button></div>
       </section>
 
-      <section className="mt-6 bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm"><div className="px-6 py-5 border-b border-slate-200"><h2 className="text-xl font-black">Convites pendentes</h2><p className="text-sm text-slate-500">Links ativos que ainda não foram utilizados</p></div>{invites.length === 0 ? <p className="p-8 text-center text-slate-500">Nenhum convite pendente.</p> : <div className="divide-y divide-slate-100">{invites.map((invite) => <div key={invite.id} className="p-5 flex flex-col sm:flex-row sm:items-center gap-3"><div className="flex-1"><p className="font-bold">{invite.name || 'Sem nome'}</p><p className="text-sm text-slate-500">{invite.email} · expira em {new Date(invite.expiresAt).toLocaleString('pt-BR')}</p></div><button disabled={busyId === invite.id} onClick={() => cancelInvite(invite)} className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-50"><MailX className="w-4 h-4" /> Cancelar convite</button></div>)}</div>}</section>
+      <section className="mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 px-6 py-5"><h2 className="text-xl font-black">Convites pendentes</h2><p className="text-sm text-slate-500">{invites.length} link{invites.length === 1 ? '' : 's'} ativo{invites.length === 1 ? '' : 's'} que ainda não foram utilizados</p></div>{invites.length === 0 ? <p className="p-8 text-center text-slate-500">Nenhum convite pendente.</p> : <><div className="divide-y divide-slate-100">{visibleInvites.map((invite) => <div key={invite.id} className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center"><div className="flex-1"><p className="font-bold">{invite.name || 'Sem nome'}</p><p className="text-sm text-slate-500">{invite.email} · expira em {new Date(invite.expiresAt).toLocaleString('pt-BR')}</p></div><button disabled={busyId === invite.id} onClick={() => cancelInvite(invite)} className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-50"><MailX className="h-4 w-4" /> Cancelar convite</button></div>)}</div>{invitePageCount > 1 && <div className="flex items-center justify-center gap-3 border-t border-slate-200 bg-slate-50 px-4 py-4"><button type="button" onClick={() => setInvitePage((value) => Math.max(1, value - 1))} disabled={currentInvitePage === 1} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold disabled:opacity-40"><ChevronLeft className="h-4 w-4" /> Anterior</button><span className="text-sm font-bold text-slate-600">{currentInvitePage} de {invitePageCount}</span><button type="button" onClick={() => setInvitePage((value) => Math.min(invitePageCount, value + 1))} disabled={currentInvitePage === invitePageCount} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold disabled:opacity-40">Próxima <ChevronRight className="h-4 w-4" /></button></div>}</>}</section>
 
       <AdminEngagementPanels onInviteCreated={loadUsers} />
 
