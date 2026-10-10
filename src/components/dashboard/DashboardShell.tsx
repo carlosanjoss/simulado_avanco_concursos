@@ -4,13 +4,12 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/components/providers'
 import { useState } from 'react'
-import { BarChart3, BookOpen, CalendarDays, ChevronDown, CreditCard, FilePlus2, Files, History, Home, LibraryBig, LogOut, Menu, NotebookTabs, ReceiptText, UserRound, Users, X } from 'lucide-react'
+import { BarChart3, BookOpen, CalendarDays, ChevronDown, CreditCard, FilePlus2, Files, Home, LibraryBig, LogOut, Menu, NotebookTabs, ReceiptText, UserRound, Users, X } from 'lucide-react'
 import { BrandLogo } from '@/components/shared/BrandLogo'
 
 const navigationSections = [
   { label: 'Visão geral', items: [
     { href: '/dashboard', label: 'Dashboard', icon: Home },
-    { href: '/dashboard#historico', label: 'Meus simulados', icon: History },
     { href: '/dashboard/relatorios', label: 'Relatórios', icon: BarChart3 },
   ] },
   { label: 'Estudo', items: [
@@ -53,9 +52,8 @@ export default function DashboardShell({ children, focusMode = false }: { childr
     : navigationSections
   const mainItems = [
     navigationSections[0].items[0],
-    navigationSections[0].items[1],
     navigationSections[1].items[0],
-    navigationSections[0].items[2],
+    navigationSections[0].items[1],
   ]
   const studyItems = [navigationSections[1].items[1], navigationSections[1].items[2], navigationSections[1].items[3], navigationSections[1].items[4]]
   const accountItems = navigationSections[2].items
