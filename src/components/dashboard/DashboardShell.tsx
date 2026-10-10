@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/components/providers'
-import { BarChart3, BookOpen, CalendarDays, CreditCard, FilePlus2, Files, History, Home, LibraryBig, LogOut, NotebookTabs, ReceiptText, UserRound, Users } from 'lucide-react'
+import { useState } from 'react'
+import { BarChart3, BookOpen, CalendarDays, ChevronDown, CreditCard, FilePlus2, Files, History, Home, LibraryBig, LogOut, Menu, NotebookTabs, ReceiptText, UserRound, Users, X } from 'lucide-react'
 import { BrandLogo } from '@/components/shared/BrandLogo'
 
 const navigationSections = [
@@ -29,6 +30,7 @@ export default function DashboardShell({ children, focusMode = false }: { childr
   const pathname = usePathname()
   const router = useRouter()
   const { user, isLoading, refresh } = useAuth()
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   const handleSignOut = async () => {
     await fetch('/api/auth/signout', { method: 'POST' })
@@ -49,22 +51,22 @@ export default function DashboardShell({ children, focusMode = false }: { childr
       { href: '/dashboard/admin/financeiro', label: 'Assinaturas', icon: ReceiptText },
     ] }]
     : navigationSections
-  const currentPage = visibleSections
-    .flatMap((section) => section.items)
-    .find((item) => {
-      const itemPath = item.href.split('#')[0]
-      if (itemPath === '/dashboard') return item.href === '/dashboard' && pathname === '/dashboard'
-      return pathname.startsWith(itemPath)
-    })
-  const pageTitle = pathname === '/dashboard/novo'
-    ? 'Novo simulado'
-    : pathname.startsWith('/dashboard/simulado/')
-      ? 'Simulado'
-      : currentPage?.label || 'Área do estudante'
-  const navigationLinks = visibleSections.flatMap((section) => section.items).map(({ href, label, icon: Icon }) => {
+  const mainItems = [
+    navigationSections[0].items[0],
+    navigationSections[0].items[1],
+    navigationSections[1].items[0],
+    navigationSections[0].items[2],
+  ]
+  const studyItems = [navigationSections[1].items[1], navigationSections[1].items[2], navigationSections[1].items[3], navigationSections[1].items[4]]
+  const accountItems = navigationSections[2].items
+  const adminItems = user?.isAdmin ? visibleSections.find((section) => section.label === 'Administração')?.items || [] : []
+  const studyActive = studyItems.some((item) => isActive(item.href))
+  const adminActive = adminItems.some((item) => isActive(item.href))
+
+  const navLink = ({ href, label, icon: Icon }: typeof mainItems[number], mobile = false) => {
     const active = isActive(href)
-    return <Link key={href} href={href} aria-current={active ? 'page' : undefined} className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-bold transition-colors ${active ? 'bg-blue-700 text-white shadow-sm' : 'text-slate-600 hover:bg-blue-50 hover:text-blue-800'}`}><Icon className="h-4 w-4" /><span>{label}</span></Link>
-  })
+    return <Link key={href} href={href} aria-current={active ? 'page' : undefined} onClick={() => setMobileOpen(false)} className={`${mobile ? 'flex items-center gap-3 rounded-xl px-4 py-3' : 'inline-flex items-center gap-2 rounded-lg px-3 py-2'} text-sm font-bold transition-colors ${active ? 'bg-blue-50 text-blue-800' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}><Icon className="h-4 w-4 shrink-0" /><span>{label}</span></Link>
+  }
 
   if (isLoading) {
     return (
@@ -97,23 +99,47 @@ export default function DashboardShell({ children, focusMode = false }: { childr
 
   return (
     <div className="flex h-dvh min-w-0 flex-col overflow-hidden bg-[#f5f8fd] text-[#06183d]">
-      <header className="z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-6">
-        <div className="flex min-w-0 items-center gap-4">
-          <BrandLogo compact />
-          <div className="hidden h-7 w-px bg-slate-200 sm:block" />
-          <div className="hidden min-w-0 sm:block"><p className="text-[10px] font-black uppercase tracking-[.16em] text-blue-700">Área do estudante</p><p className="truncate text-sm font-bold text-slate-800">{pageTitle}</p></div>
+      <header className="relative z-30 flex h-[72px] shrink-0 items-center border-b border-slate-200 bg-white/95 px-4 shadow-sm backdrop-blur sm:px-6">
+        <div className="mx-auto flex w-full max-w-[1440px] items-center gap-5">
+          <Link href="/dashboard" className="shrink-0" aria-label="Ir para o dashboard"><BrandLogo compact /></Link>
+
+          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-1 xl:flex" aria-label="Navegação principal">
+            {mainItems.map((item) => navLink(item))}
+            <details className="group relative">
+              <summary className={`flex cursor-pointer list-none items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-bold transition ${studyActive ? 'bg-blue-50 text-blue-800' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}>Estudar <ChevronDown className="h-4 w-4 transition group-open:rotate-180" /></summary>
+              <div className="absolute left-0 top-[calc(100%+10px)] z-50 w-60 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">{studyItems.map((item) => navLink(item, true))}</div>
+            </details>
+            {adminItems.length > 0 && <details className="group relative">
+              <summary className={`flex cursor-pointer list-none items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-bold transition ${adminActive ? 'bg-blue-50 text-blue-800' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}>Administração <ChevronDown className="h-4 w-4 transition group-open:rotate-180" /></summary>
+              <div className="absolute right-0 top-[calc(100%+10px)] z-50 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">{adminItems.map((item) => navLink(item, true))}</div>
+            </details>}
+          </nav>
+
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <Link href="/dashboard/novo" className="hidden items-center gap-2 rounded-xl bg-[#ffc400] px-4 py-2.5 text-sm font-black text-[#06183d] shadow-sm transition hover:bg-yellow-300 sm:inline-flex"><FilePlus2 className="h-4 w-4" /> Criar simulado</Link>
+            <details className="group relative hidden xl:block">
+              <summary className="flex cursor-pointer list-none items-center gap-1 rounded-xl border border-slate-200 bg-white p-1.5 transition hover:border-blue-200 hover:bg-blue-50" aria-label="Abrir menu da conta">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-700 text-sm font-black text-white">{user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}</span>
+                <ChevronDown className="h-4 w-4 text-slate-400 transition group-open:rotate-180" />
+              </summary>
+              <div className="absolute right-0 top-[calc(100%+10px)] z-50 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+                <div className="border-b border-slate-100 px-3 py-2.5"><p className="truncate text-sm font-bold text-slate-800">{user.name || 'Estudante'}</p><p className="truncate text-xs text-slate-400">{user.email}</p></div>
+                {accountItems.map((item) => navLink(item, true))}
+                <button onClick={handleSignOut} className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-red-600 transition hover:bg-red-50"><LogOut className="h-4 w-4" /> Sair</button>
+              </div>
+            </details>
+            <button type="button" onClick={() => setMobileOpen((open) => !open)} className="rounded-xl border border-slate-200 p-2.5 text-slate-700 transition hover:bg-slate-100 xl:hidden" aria-expanded={mobileOpen} aria-label={mobileOpen ? 'Fechar menu' : 'Abrir menu'}>{mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}</button>
+          </div>
         </div>
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="hidden min-w-0 text-right md:block"><p className="truncate text-sm font-bold text-slate-700">{user.name || 'Estudante'}</p><p className="truncate text-xs text-slate-400">{user.email}</p></div>
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-black text-blue-700">{user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}</div>
-          <button onClick={handleSignOut} className="shrink-0 rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800" aria-label="Sair"><LogOut className="h-[18px] w-[18px]" /></button>
-        </div>
+
+        {mobileOpen && <div className="absolute inset-x-0 top-full border-b border-slate-200 bg-white p-4 shadow-xl xl:hidden">
+          <div className="mx-auto grid max-w-4xl gap-1 sm:grid-cols-2">
+            <Link href="/dashboard/novo" onClick={() => setMobileOpen(false)} className="flex items-center gap-3 rounded-xl bg-amber-50 px-4 py-3 text-sm font-black text-amber-950 sm:hidden"><FilePlus2 className="h-4 w-4" /> Criar simulado</Link>
+            {[...mainItems, ...studyItems, ...accountItems, ...adminItems].map((item) => navLink(item, true))}
+            <button onClick={handleSignOut} className="flex items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-bold text-red-600 transition hover:bg-red-50"><LogOut className="h-4 w-4" /> Sair</button>
+          </div>
+        </div>}
       </header>
-      <nav className="dashboard-scrollbar flex h-[54px] shrink-0 items-center gap-1.5 overflow-x-auto overscroll-x-contain border-b border-slate-200 bg-white px-4 sm:px-6" aria-label="Navegação principal">
-        <Link href="/dashboard/novo" aria-current={pathname === '/dashboard/novo' ? 'page' : undefined} className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-black transition-colors ${pathname === '/dashboard/novo' ? 'bg-[#ffc400] text-[#06183d] shadow-sm' : 'bg-amber-50 text-amber-900 hover:bg-[#ffc400]'}`}><FilePlus2 className="h-4 w-4" /> Criar simulado</Link>
-        <span className="mx-1 h-6 w-px shrink-0 bg-slate-200" aria-hidden />
-        {navigationLinks}
-      </nav>
       <main className="dashboard-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</main>
     </div>
   )
