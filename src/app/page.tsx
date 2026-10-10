@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowRight, BarChart3, Check, CheckCircle2, ChevronDown, FileCheck2, FileText, LockKeyhole, MessageSquareText, ShieldCheck, Sparkles, Target, UploadCloud } from 'lucide-react'
+import { ArrowRight, BarChart3, CalendarDays, Check, CheckCircle2, ChevronDown, Crown, FileCheck2, Layers3, LockKeyhole, MessageSquareText, NotebookTabs, PenLine, ScanText, ShieldCheck, Sparkles, Target, UploadCloud } from 'lucide-react'
 import { BrandLogo } from '@/components/shared/BrandLogo'
 import { useAuth } from '@/components/providers'
 
@@ -11,15 +11,25 @@ const benefits = [
   { icon: Target, title: 'Foco personalizado', text: 'Escolha os tópicos que realmente deseja estudar.' },
   { icon: FileCheck2, title: 'Questões de qualidade', text: 'Quantidade e dificuldade ajustadas ao seu objetivo.' },
   { icon: MessageSquareText, title: 'Feedback imediato', text: 'Veja a resposta correta e a justificativa detalhada.' },
-  { icon: ShieldCheck, title: 'Privacidade por padrão', text: 'O PDF original não é mantido como biblioteca após a geração.' },
+  { icon: ShieldCheck, title: 'Privacidade por padrão', text: 'O arquivo PDF original não é armazenado e seus materiais ficam protegidos por usuário.' },
+]
+
+const proFeatures = [
+  { icon: ScanText, title: 'OCR integrado', text: 'Use também PDFs digitalizados ou com páginas em imagem.' },
+  { icon: PenLine, title: 'Editor inteligente', text: 'Edite ou regenere uma questão sem recriar todo o simulado.' },
+  { icon: BarChart3, title: 'Relatórios avançados', text: 'Compare evolução, temas, dificuldades e ritmo de estudo.' },
+  { icon: CalendarDays, title: 'Plano sincronizado', text: 'Organize a semana com base nos conteúdos dos seus simulados.' },
+  { icon: NotebookTabs, title: 'Revisão espaçada', text: 'Transforme erros em revisões programadas automaticamente.' },
+  { icon: Layers3, title: 'Múltiplos materiais', text: 'Combine até cinco materiais no mesmo simulado.' },
 ]
 
 const faq = [
-  ['Meu PDF fica armazenado?', 'Não. O documento e seus vetores são usados apenas durante a geração e descartados ao final.'],
+  ['Meu PDF fica armazenado?', 'O arquivo PDF original não é armazenado. O texto processado e os vetores ficam na sua biblioteca para reutilização até você arquivar ou excluir o material.'],
   ['Como funciona o acesso?', 'Durante o beta, o acesso pode ser liberado por convite. Quando o cadastro público estiver ativo, você também poderá criar sua conta diretamente.'],
-  ['Quantas questões são geradas?', 'Você escolhe entre 10, 20, 30, 40 ou 50 questões por simulado.'],
+  ['Quantas questões são geradas?', 'No plano Grátis, você escolhe 10 ou 20 questões. No Pro, também pode gerar 30, 40 ou 50 questões por simulado.'],
   ['Posso escolher os assuntos?', 'Sim. O campo de tópicos de foco permite priorizar conteúdos presentes no PDF.'],
   ['Quais PDFs são aceitos?', 'Arquivos PDF com texto extraível, até 20 MB e no máximo 400 páginas.'],
+  ['O que o plano Pro libera?', 'O Pro aumenta o limite para 30 gerações mensais e inclui até 50 questões, OCR, editor e regeneração, relatórios avançados, plano de estudos, revisão espaçada, múltiplos materiais e banco completo de questões.'],
 ]
 
 export default function LandingPage() {
@@ -33,7 +43,7 @@ export default function LandingPage() {
             <Link href="#inicio" className="text-blue-700">Início</Link>
             <Link href="#como-funciona" className="hover:text-blue-700">Como funciona</Link>
             <Link href="#recursos" className="hover:text-blue-700">Recursos</Link>
-            <Link href="/precos" className="hover:text-blue-700">Preços</Link>
+            <Link href="#planos" className="hover:text-blue-700">Planos</Link>
             <Link href="#seguranca" className="hover:text-blue-700">Segurança</Link>
             <Link href="#faq" className="hover:text-blue-700">FAQ</Link>
           </nav>
@@ -61,8 +71,9 @@ export default function LandingPage() {
                 ) : (
                   <Link href="/sign-in" className="bg-blue-700 hover:bg-blue-800 text-white px-7 py-4 rounded-xl font-bold flex items-center gap-3 shadow-xl shadow-blue-200">Entrar <ArrowRight className="w-5 h-5" /></Link>
                 )}
-                <Link href="#como-funciona" className="px-7 py-4 rounded-xl border border-slate-300 font-bold hover:bg-slate-50">Ver como funciona</Link>
+                <Link href="#planos" className="px-7 py-4 rounded-xl border border-slate-300 font-bold hover:bg-slate-50">Conhecer o Pro</Link>
               </div>
+              <p className="mt-4 text-sm font-semibold text-slate-500">Comece grátis com 2 gerações por mês e até 20 questões por simulado.</p>
               <div className="mt-10 flex items-center gap-3 text-sm text-slate-600"><CheckCircle2 className="h-6 w-6 text-emerald-500" /><p><strong className="text-[#06183d]">Questões rastreáveis</strong><br />com página e trecho do material usado</p></div>
             </div>
             <div className="relative z-10 min-h-[420px] lg:min-h-[540px] flex items-center justify-center">
@@ -85,9 +96,24 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section className="py-24 bg-white"><div className="max-w-7xl mx-auto px-5 grid lg:grid-cols-2 gap-16 items-center"><Image src="/images/quiz-study.png" alt="Simulado interativo em notebook" width={1400} height={1050} className="w-full h-auto" /><div><span className="text-blue-700 font-bold uppercase tracking-widest text-xs">Preparação completa</span><h2 className="text-4xl md:text-5xl font-black mt-4">Estude com o que realmente importa</h2><p className="text-slate-600 text-lg mt-5">Questões contextualizadas, justificativas detalhadas e acompanhamento de desempenho em uma experiência criada para concursos, faculdade e certificações.</p><div className="mt-8 space-y-4">{['Simulados baseados no seu PDF','Dificuldade configurável','De 10 a 50 questões','Histórico e evolução do desempenho'].map(text => <div key={text} className="flex gap-3 items-center font-semibold"><CheckCircle2 className="w-6 h-6 text-emerald-500" />{text}</div>)}</div></div></div></section>
+        <section id="planos" className="relative overflow-hidden bg-white py-24">
+          <div className="absolute inset-x-0 top-0 h-72 bg-gradient-to-b from-blue-50/80 to-transparent" />
+          <div className="relative mx-auto max-w-7xl px-5">
+            <div className="mx-auto max-w-3xl text-center"><span className="text-xs font-black uppercase tracking-[.2em] text-blue-700">Grátis para começar. Pro para avançar.</span><h2 className="mt-3 text-4xl font-black sm:text-5xl">Escolha o ritmo da sua preparação</h2><p className="mt-4 text-lg text-slate-600">Experimente os simulados gratuitamente e libere a experiência completa quando quiser estudar com mais profundidade.</p></div>
 
-        <section id="seguranca" className="avanco-navy-deep avanco-grid text-white py-20"><div className="max-w-7xl mx-auto px-5 grid lg:grid-cols-2 items-center gap-12"><div><span className="text-[#ffc400] font-bold uppercase tracking-widest text-xs">Privacidade em primeiro lugar</span><h2 className="text-4xl md:text-5xl font-black mt-4">Seus materiais em segurança</h2><p className="text-blue-100 text-lg mt-5 max-w-xl">O PDF é processado somente para criar o simulado. Em documentos extensos, texto e vetores ficam armazenados temporariamente, isolados por usuário e com exclusão automática após a expiração.</p><div className="grid sm:grid-cols-2 gap-4 mt-8">{['Retenção temporária','Exclusão automática','Acesso protegido','Simulados privados por usuário'].map(text => <div key={text} className="flex gap-3"><span className="w-6 h-6 rounded bg-[#ffc400] text-[#06183d] flex items-center justify-center"><Check className="w-4 h-4" /></span>{text}</div>)}</div></div><Image src="/images/security-study.png" alt="Proteção e segurança dos materiais" width={1280} height={1280} className="w-full max-w-[520px] mx-auto h-auto" /></div></section>
+            <div className="mx-auto mt-12 grid max-w-5xl gap-6 lg:grid-cols-2 lg:items-stretch">
+              <article className="flex flex-col rounded-3xl border border-slate-200 bg-white p-7 shadow-sm sm:p-9"><p className="text-sm font-black uppercase tracking-[.16em] text-slate-500">Plano Grátis</p><h3 className="mt-3 text-3xl font-black">Comece sem pagar</h3><p className="mt-3 text-slate-600">Para conhecer o método com os recursos essenciais.</p><ul className="my-8 space-y-4">{['2 gerações por mês','Até 20 questões por simulado','Dificuldade configurável','Histórico básico de desempenho','Até 3 materiais ativos','Um material por simulado'].map((feature) => <li key={feature} className="flex gap-3 font-semibold text-slate-700"><span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600"><Check className="h-4 w-4" /></span>{feature}</li>)}</ul><Link href={user ? '/dashboard/novo' : '/sign-up'} className="mt-auto flex items-center justify-center rounded-xl border border-blue-700 px-6 py-3.5 font-black text-blue-700 hover:bg-blue-50">{user ? 'Criar simulado grátis' : 'Criar conta grátis'}</Link></article>
+
+              <article className="relative flex flex-col overflow-hidden rounded-3xl bg-[#061b46] p-7 text-white shadow-2xl shadow-blue-200 sm:p-9"><div className="absolute -right-16 -top-16 h-52 w-52 rounded-full bg-blue-500/20 blur-2xl" /><span className="relative inline-flex w-fit items-center gap-2 rounded-full bg-[#ffc400] px-3 py-1.5 text-xs font-black uppercase tracking-wider text-[#06183d]"><Crown className="h-4 w-4" /> Experiência completa</span><h3 className="relative mt-5 text-3xl font-black">Avanço Pro</h3><p className="relative mt-3 text-blue-100">Mais simulados e ferramentas para transformar desempenho em rotina de aprovação.</p><ul className="relative my-8 grid gap-4 sm:grid-cols-2">{['30 gerações por mês','Até 50 questões','OCR para PDFs digitalizados','Editor e regeneração','Relatórios avançados','Plano de estudos','Caderno de erros','Até 5 materiais por simulado','Banco completo de questões'].map((feature) => <li key={feature} className="flex gap-3 text-sm font-bold"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ffc400] text-[#06183d]"><Check className="h-3.5 w-3.5" /></span>{feature}</li>)}</ul><Link href="/precos" className="relative mt-auto flex items-center justify-center gap-2 rounded-xl bg-[#ffc400] px-6 py-3.5 font-black text-[#06183d] hover:bg-yellow-300">Ver preços e assinar <ArrowRight className="h-5 w-5" /></Link></article>
+            </div>
+
+            <div className="mt-16"><div className="text-center"><p className="text-xs font-black uppercase tracking-[.18em] text-blue-700">O que você ganha com o Pro</p><h3 className="mt-3 text-3xl font-black">Ferramentas para estudar, corrigir e revisar</h3></div><div className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{proFeatures.map(({ icon: Icon, title, text }) => <article key={title} className="rounded-2xl border border-blue-100 bg-blue-50/40 p-6"><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-blue-700 shadow-sm"><Icon className="h-5 w-5" /></span><h4 className="mt-4 text-lg font-black">{title}</h4><p className="mt-2 text-sm leading-relaxed text-slate-600">{text}</p></article>)}</div></div>
+          </div>
+        </section>
+
+        <section className="py-24 bg-white"><div className="max-w-7xl mx-auto px-5 grid lg:grid-cols-2 gap-16 items-center"><Image src="/images/quiz-study.png" alt="Simulado interativo em notebook" width={1400} height={1050} className="w-full h-auto" /><div><span className="text-blue-700 font-bold uppercase tracking-widest text-xs">Preparação completa</span><h2 className="text-4xl md:text-5xl font-black mt-4">Estude com o que realmente importa</h2><p className="text-slate-600 text-lg mt-5">Questões contextualizadas, justificativas detalhadas e acompanhamento de desempenho em uma experiência criada para concursos, faculdade e certificações.</p><div className="mt-8 space-y-4">{['Simulados baseados no seu PDF','Dificuldade configurável','Até 20 questões no Grátis e 50 no Pro','Histórico básico ou relatórios avançados no Pro'].map(text => <div key={text} className="flex gap-3 items-center font-semibold"><CheckCircle2 className="w-6 h-6 text-emerald-500" />{text}</div>)}</div></div></div></section>
+
+        <section id="seguranca" className="avanco-navy-deep avanco-grid text-white py-20"><div className="max-w-7xl mx-auto px-5 grid lg:grid-cols-2 items-center gap-12"><div><span className="text-[#ffc400] font-bold uppercase tracking-widest text-xs">Privacidade em primeiro lugar</span><h2 className="text-4xl md:text-5xl font-black mt-4">Seus materiais em segurança</h2><p className="text-blue-100 text-lg mt-5 max-w-xl">O arquivo PDF original não é armazenado. O texto processado e os vetores ficam na sua biblioteca, isolados por usuário, para que você possa reutilizar o material até decidir arquivá-lo ou excluí-lo.</p><div className="grid sm:grid-cols-2 gap-4 mt-8">{['PDF original não armazenado','Exclusão pelo usuário','Acesso protegido','Simulados privados por usuário'].map(text => <div key={text} className="flex gap-3"><span className="w-6 h-6 rounded bg-[#ffc400] text-[#06183d] flex items-center justify-center"><Check className="w-4 h-4" /></span>{text}</div>)}</div></div><Image src="/images/security-study.png" alt="Proteção e segurança dos materiais" width={1280} height={1280} className="w-full max-w-[520px] mx-auto h-auto" /></div></section>
 
         <section id="faq" className="py-24 bg-white"><div className="max-w-3xl mx-auto px-5"><div className="text-center"><span className="text-blue-700 font-bold uppercase tracking-widest text-xs">Dúvidas frequentes</span><h2 className="text-4xl font-black mt-3">Tudo o que você precisa saber</h2></div><div className="mt-10 divide-y divide-slate-200 border-y border-slate-200">{faq.map(([question,answer]) => <details key={question} className="group py-5"><summary className="list-none cursor-pointer flex items-center justify-between font-bold text-lg">{question}<ChevronDown className="w-5 h-5 group-open:rotate-180 transition-transform" /></summary><p className="text-slate-600 mt-3 pr-8 leading-relaxed">{answer}</p></details>)}</div></div></section>
 
