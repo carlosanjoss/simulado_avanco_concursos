@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { getAuthenticatedUser } from '@/lib/server-auth'
 import { questionSchema } from '@/lib/validations/quiz'
 import type { Question } from '@/types/quiz'
+import { getUserPlanAccess } from '@/lib/plan-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +14,7 @@ const requestSchema = z.object({ limit: z.union([z.literal(5), z.literal(10), z.
 export async function POST(request: NextRequest) {
   const user = await getAuthenticatedUser(request)
   if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+  if (!(await getUserPlanAccess(user)).reviewNotebook) return NextResponse.json({ error: 'O caderno de erros está disponível no plano Pro.' }, { status: 403 })
 
   const parsed = requestSchema.safeParse(await request.json().catch(() => ({})))
   if (!parsed.success) return NextResponse.json({ error: 'Quantidade de questões inválida' }, { status: 400 })

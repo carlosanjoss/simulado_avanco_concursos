@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { getAuthenticatedUser } from '@/lib/server-auth'
 import { nextReviewSchedule } from '@/lib/spaced-repetition'
+import { getUserPlanAccess } from '@/lib/plan-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,6 +12,7 @@ const reviewSchema = z.object({ cardId: z.string().min(1).max(120), quality: z.n
 export async function GET(request: NextRequest) {
   const user = await getAuthenticatedUser(request)
   if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+  if (!(await getUserPlanAccess(user)).reviewNotebook) return NextResponse.json({ error: 'O caderno de erros está disponível no plano Pro.' }, { status: 403 })
   const dueOnly = new URL(request.url).searchParams.get('due') !== 'false'
   const cards = await prisma.reviewCard.findMany({
     where: { userId: user.id, masteredAt: null, ...(dueOnly ? { dueAt: { lte: new Date() } } : {}) },
@@ -24,6 +26,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const user = await getAuthenticatedUser(request)
   if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+  if (!(await getUserPlanAccess(user)).reviewNotebook) return NextResponse.json({ error: 'O caderno de erros está disponível no plano Pro.' }, { status: 403 })
   const parsed = reviewSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Revisão inválida' }, { status: 400 })
   const card = await prisma.reviewCard.findFirst({ where: { id: parsed.data.cardId, userId: user.id } })

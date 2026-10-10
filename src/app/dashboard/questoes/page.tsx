@@ -5,6 +5,8 @@ import type { Question } from '@/types/quiz'
 import QuestionBankClient from './QuestionBankClient'
 import { getAuthenticatedUserFromCookie } from '@/lib/server-auth'
 import { headers } from 'next/headers'
+import { getUserPlanAccess } from '@/lib/plan-access'
+import { ProFeatureNotice } from '@/components/billing/ProFeatureNotice'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +16,8 @@ export default async function QuestionBankPage() {
   const cookie = headersList.get('cookie') || ''
   const user = await getAuthenticatedUserFromCookie(cookie)
   if (!user) redirect('/sign-in')
+  const access = await getUserPlanAccess(user)
+  if (!access.fullQuestionBank) return <DashboardShell><ProFeatureNotice title="Banco completo de questões" description="Pesquise, filtre e reutilize todas as questões geradas nos seus simulados em um único lugar." /></DashboardShell>
 
   const simulados = await prisma.simulado.findMany({
     where: { userId: user.id, deletedAt: null },

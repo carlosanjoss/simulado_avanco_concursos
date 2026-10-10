@@ -1,0 +1,6 @@
+import Link from 'next/link'
+import { Crown, Sparkles } from 'lucide-react'
+
+export function ProFeatureNotice({ title, description }: { title: string; description: string }) {
+  return <div className="mx-auto max-w-3xl p-4 pb-10 sm:p-6 lg:p-7"><section className="overflow-hidden rounded-3xl border border-blue-100 bg-white shadow-sm"><div className="bg-gradient-to-br from-[#061b46] via-[#07347d] to-[#075ed1] p-8 text-white sm:p-10"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10"><Crown className="h-6 w-6 text-[#ffc400]" /></span><p className="mt-6 text-xs font-black uppercase tracking-[.18em] text-blue-200">Recurso do plano Pro</p><h1 className="mt-2 text-3xl font-black">{title}</h1><p className="mt-3 max-w-xl leading-relaxed text-blue-100">{description}</p></div><div className="p-7 sm:flex sm:items-center sm:justify-between sm:gap-6"><p className="text-sm text-slate-600">Faça upgrade para liberar este recurso e gerar simulados com até 50 questões.</p><Link href="/dashboard/assinatura" className="mt-5 inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#ffc400] px-5 py-3 font-black text-[#06183d] sm:mt-0"><Sparkles className="h-4 w-4" /> Conhecer o Pro</Link></div></section></div>
+}

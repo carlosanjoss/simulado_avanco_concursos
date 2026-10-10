@@ -5,6 +5,7 @@ import { attemptSubmissionSchema } from '@/lib/validations/attempt'
 import type { Question } from '@/types/quiz'
 import { getAuthenticatedUser } from '@/lib/server-auth'
 import { syncReviewCardsFromAttempt } from '@/lib/review-cards'
+import { getUserPlanAccess } from '@/lib/plan-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -91,8 +92,10 @@ export async function POST(request: NextRequest) {
           })
 
       await prisma.simulado.update({ where: { id: simulado.id }, data: { status: 'CONCLUIDO' } })
-      await syncReviewCardsFromAttempt({ userId: user.id, simuladoId: simulado.id, questions, answers: respostas })
-        .catch((error) => console.error('Falha ao sincronizar caderno de erros:', error))
+      if ((await getUserPlanAccess(user)).reviewNotebook) {
+        await syncReviewCardsFromAttempt({ userId: user.id, simuladoId: simulado.id, questions, answers: respostas })
+          .catch((error) => console.error('Falha ao sincronizar caderno de erros:', error))
+      }
       return NextResponse.json({ success: true, tentativaId: tentativa.id, pontuacao, percentual, durationSeconds, isFinal: true })
     }
 

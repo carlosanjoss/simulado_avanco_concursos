@@ -6,6 +6,8 @@ import { prisma } from '@/lib/prisma'
 import { getAuthenticatedUserFromCookie } from '@/lib/server-auth'
 import { evaluateAnswer } from '@/lib/quiz-evaluation'
 import type { Question } from '@/types/quiz'
+import { getUserPlanAccess } from '@/lib/plan-access'
+import { ProFeatureNotice } from '@/components/billing/ProFeatureNotice'
 
 export const dynamic = 'force-dynamic'
 type Group = { label: string; correct: number; total: number }
@@ -13,6 +15,8 @@ type Group = { label: string; correct: number; total: number }
 export default async function ReportsPage() {
   const user = await getAuthenticatedUserFromCookie((await headers()).get('cookie'))
   if (!user) redirect('/sign-in')
+  const access = await getUserPlanAccess(user)
+  if (!access.advancedReports) return <DashboardShell><ProFeatureNotice title="Relatórios avançados" description="Compare seu desempenho por tema e dificuldade, acompanhe sua evolução e identifique os pontos que mais precisam de atenção." /></DashboardShell>
   const [attempts, dueReviews] = await Promise.all([
     prisma.tentativa.findMany({ where: { userId: user.id, concluidoEm: { not: null } }, include: { simulado: { select: { titulo: true, questoesJson: true } } }, orderBy: { concluidoEm: 'asc' } }),
     prisma.reviewCard.count({ where: { userId: user.id, masteredAt: null, dueAt: { lte: new Date() } } }),

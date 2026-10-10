@@ -5,12 +5,16 @@ import { prisma } from '@/lib/prisma'
 import { getAuthenticatedUserFromCookie } from '@/lib/server-auth'
 import type { Question } from '@/types/quiz'
 import ReviewCardsClient from './ReviewCardsClient'
+import { getUserPlanAccess } from '@/lib/plan-access'
+import { ProFeatureNotice } from '@/components/billing/ProFeatureNotice'
 
 export const dynamic = 'force-dynamic'
 
 export default async function ReviewNotebookPage() {
   const user = await getAuthenticatedUserFromCookie((await headers()).get('cookie'))
   if (!user) redirect('/sign-in')
+  const access = await getUserPlanAccess(user)
+  if (!access.reviewNotebook) return <DashboardShell><ProFeatureNotice title="Caderno de erros e revisão espaçada" description="Revise automaticamente as questões que você errou usando intervalos personalizados conforme o seu desempenho." /></DashboardShell>
   const now = new Date()
   const [cards, pendingCount] = await Promise.all([
     prisma.reviewCard.findMany({

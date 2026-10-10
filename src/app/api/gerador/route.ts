@@ -27,6 +27,7 @@ import type { RetrievedQuestionContext } from '@/lib/document-vector-store'
 import type { VectorDocument } from '@/lib/document-vector-store'
 import type { Question } from '@/types/quiz'
 import { getAuthenticatedUser } from '@/lib/server-auth'
+import { getUserPlanAccess } from '@/lib/plan-access'
 
 const MAX_FOCUS_LENGTH = 500
 const ALLOWED_QUESTION_COUNTS = new Set([10, 20, 30, 40, 50])
@@ -37,7 +38,7 @@ export const dynamic = 'force-dynamic'
 type ErrorCode =
   | 'UNAUTHORIZED' | 'INVALID_FILE' | 'FILE_TOO_LARGE' | 'EMPTY_PDF'
   | 'PDF_PARSE_ERROR' | 'PDF_TOO_MANY_PAGES' | 'MONTHLY_LIMIT_REACHED' | 'AI_UNAVAILABLE'
-  | 'INVALID_AI_RESPONSE' | 'VECTOR_DOCUMENT_ERROR' | 'DATABASE_ERROR' | 'INTERNAL_ERROR'
+  | 'INVALID_AI_RESPONSE' | 'VECTOR_DOCUMENT_ERROR' | 'DATABASE_ERROR' | 'INTERNAL_ERROR' | 'PLAN_RESTRICTION'
 
 function errorResponse(code: ErrorCode, message: string, status: number) {
   return NextResponse.json({ success: false, code, message }, { status })
@@ -107,6 +108,7 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
 
   const user = await getUserFromRequest(request)
   if (!user) return errorResponse('UNAUTHORIZED', 'Faça login para gerar um simulado.', 401)
+  const access = await getUserPlanAccess(user)
 
   const ipLimit = await checkIpRateLimit(getClientIp(request))
   if (!ipLimit.allowed) return errorResponse('AI_UNAVAILABLE', 'Muitas solicitações. Tente novamente mais tarde.', 429)
@@ -135,6 +137,9 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
     if (documentIds.length > 5 || documentIds.some((id) => !/^[0-9a-f-]{36}$/i.test(id))) {
       return errorResponse('VECTOR_DOCUMENT_ERROR', 'Selecione no máximo cinco materiais válidos.', 400)
     }
+    if (documentIds.length > access.maxMaterialsPerQuiz) {
+      return errorResponse('PLAN_RESTRICTION', 'O plano Grátis permite usar um material por simulado. Faça upgrade para combinar materiais.', 403)
+    }
     let materialWeights: Record<string, number> = {}
     const materialWeightsEntry = formData.get('materialWeights')
     if (typeof materialWeightsEntry === 'string' && materialWeightsEntry) {
@@ -150,6 +155,9 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
     const requestedCount = Number(formData.get('questionCount') || 30)
     if (!ALLOWED_QUESTION_COUNTS.has(requestedCount)) {
       return errorResponse('INVALID_AI_RESPONSE', 'Escolha 10, 20, 30, 40 ou 50 questões.', 400)
+    }
+    if (requestedCount > access.maxQuestionsPerQuiz) {
+      return errorResponse('PLAN_RESTRICTION', `Seu plano permite até ${access.maxQuestionsPerQuiz} questões por simulado.`, 403)
     }
     const requestedDifficulty = String(formData.get('difficulty') || 'Misto')
     if (!ALLOWED_DIFFICULTIES.has(requestedDifficulty)) {
@@ -177,6 +185,9 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
       }
       vectorDocuments = loadedDocuments as VectorDocument[]
       ocrUsed = vectorDocuments.some((document) => document.ocr_pages > 0)
+      if (ocrUsed && !access.ocr) {
+        return errorResponse('PLAN_RESTRICTION', 'O processamento OCR está disponível no plano Pro.', 403)
+      }
       const combinedHash = createHash('sha256')
       vectorDocuments.forEach((document) => combinedHash.update(document.file_hash))
       pdfHash = combinedHash.update(focusTopics || '').update(String(questionCount)).update(difficultyTarget).digest('hex')

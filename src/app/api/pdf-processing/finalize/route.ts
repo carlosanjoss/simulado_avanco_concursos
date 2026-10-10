@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getAuthenticatedUser } from '@/lib/server-auth';
-import { finalizeVectorDocument, getVectorDocument } from '@/lib/document-vector-store';
+import { finalizeVectorDocument, getVectorDocument, listVectorMaterials } from '@/lib/document-vector-store';
 import { isSupabaseVectorConfigured } from '@/lib/supabase-admin';
+import { getUserPlanAccess } from '@/lib/plan-access';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,18 +14,26 @@ export async function POST(request: NextRequest) {
   if (process.env.NEXT_PHASE === 'phase-production-build') {
     return NextResponse.json({ success: true, documentId: 'build' });
   }
-  const userId = (await getAuthenticatedUser(request))?.id;
-  if (!userId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const user = await getAuthenticatedUser(request);
+  if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const userId = user.id;
   if (!isSupabaseVectorConfigured()) {
     return NextResponse.json({ error: 'Processamento em lotes não configurado' }, { status: 503 });
   }
 
   const parsed = finalizeSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'Documento inválido' }, { status: 400 });
+  const access = await getUserPlanAccess(user);
+  if (parsed.data.ocrPages > 0 && !access.ocr) {
+    return NextResponse.json({ error: 'O processamento OCR está disponível no plano Pro.' }, { status: 403 });
+  }
 
   try {
     const document = await getVectorDocument(parsed.data.documentId, userId);
     if (!document) return NextResponse.json({ error: 'Documento não encontrado' }, { status: 404 });
+    if (access.materialLimit !== null && document.status !== 'ready' && (await listVectorMaterials(userId)).length >= access.materialLimit) {
+      return NextResponse.json({ error: `O plano Grátis permite até ${access.materialLimit} materiais ativos.` }, { status: 403 });
+    }
     const result = await finalizeVectorDocument(document, parsed.data.ocrPages);
     return NextResponse.json({ success: true, documentId: document.id, ...result });
   } catch (error) {

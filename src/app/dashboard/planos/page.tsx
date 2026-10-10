@@ -6,6 +6,8 @@ import StudyPlanClient from './StudyPlanClient'
 import { getAuthenticatedUserFromCookie } from '@/lib/server-auth'
 import { headers } from 'next/headers'
 import { getStudyWeekKey } from '@/lib/study-plan'
+import { getUserPlanAccess } from '@/lib/plan-access'
+import { ProFeatureNotice } from '@/components/billing/ProFeatureNotice'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +17,8 @@ export default async function StudyPlansPage() {
   const cookie = headersList.get('cookie') || ''
   const user = await getAuthenticatedUserFromCookie(cookie)
   if (!user) redirect('/sign-in')
+  const access = await getUserPlanAccess(user)
+  if (!access.studyPlan) return <DashboardShell><ProFeatureNotice title="Plano de estudos sincronizado" description="Organize automaticamente sua semana com base nos conteúdos dos seus simulados e mantenha o progresso sincronizado na sua conta." /></DashboardShell>
 
   const simulados = await prisma.simulado.findMany({
     where: { userId: user.id, deletedAt: null },

@@ -5,6 +5,7 @@ import { getAuthenticatedUser } from '@/lib/server-auth'
 import { buildQuizPrompts } from '@/lib/prompts/quiz-generation'
 import { generateQuizBatchWithFallback } from '@/lib/ai-providers'
 import type { Question } from '@/types/quiz'
+import { getUserPlanAccess } from '@/lib/plan-access'
 
 const editSchema = z.object({
   tema: z.string().trim().min(2).max(120),
@@ -20,6 +21,7 @@ type RouteContext = { params: Promise<{ id: string; questionId: string }> }
 async function ownedSimulado(request: NextRequest, id: string) {
   const user = await getAuthenticatedUser(request)
   if (!user) return { error: NextResponse.json({ error: 'Não autorizado' }, { status: 401 }) }
+  if (!(await getUserPlanAccess(user)).questionEditor) return { error: NextResponse.json({ error: 'O editor e a regeneração de questões estão disponíveis no plano Pro.' }, { status: 403 }) }
   const simulado = await prisma.simulado.findFirst({ where: { id, userId: user.id, deletedAt: null }, include: { tentativas: { where: { concluidoEm: { not: null } }, select: { id: true }, take: 1 } } })
   if (!simulado) return { error: NextResponse.json({ error: 'Simulado não encontrado' }, { status: 404 }) }
   if (simulado.pdfHash.startsWith('review-session:')) return { error: NextResponse.json({ error: 'Questões de uma revisão são vinculadas ao caderno de erros e não podem ser alteradas.' }, { status: 409 }) }

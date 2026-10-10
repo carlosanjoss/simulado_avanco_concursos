@@ -22,7 +22,7 @@ interface Simulado {
 
 interface DashboardClientProps {
   simulados: Simulado[]
-  stats: { completed: number; average: number; answered: number; remaining: number | null; used: number; unlimited: boolean; limit: number | null }
+  stats: { completed: number; average: number; answered: number; remaining: number | null; used: number; unlimited: boolean; limit: number | null; isPro: boolean }
 }
 
 function getQuestionText(simulado: Simulado, completed: boolean, inProgress: boolean): string {
@@ -125,7 +125,7 @@ export default function DashboardClient({ simulados, stats }: DashboardClientPro
               </Link>
             </div>
           ) : (
-            <><div className="divide-y divide-slate-100">{visibleSimulados.map((simulado) => <HistoryRow key={simulado.id} simulado={simulado} />)}</div>{historyPageCount > 1 && <div className="flex items-center justify-center gap-3 border-t border-slate-200 bg-slate-50 px-4 py-4"><button type="button" onClick={() => setHistoryPage((page) => Math.max(1, page - 1))} disabled={historyPage === 1} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold disabled:opacity-40"><ChevronLeft className="h-4 w-4" /> Anterior</button><span className="text-sm font-bold text-slate-600">Página {historyPage} de {historyPageCount}</span><button type="button" onClick={() => setHistoryPage((page) => Math.min(historyPageCount, page + 1))} disabled={historyPage === historyPageCount} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold disabled:opacity-40">Próxima <ChevronRight className="h-4 w-4" /></button></div>}</>
+            <><div className="divide-y divide-slate-100">{visibleSimulados.map((simulado) => <HistoryRow key={simulado.id} simulado={simulado} canEdit={stats.isPro} />)}</div>{historyPageCount > 1 && <div className="flex items-center justify-center gap-3 border-t border-slate-200 bg-slate-50 px-4 py-4"><button type="button" onClick={() => setHistoryPage((page) => Math.max(1, page - 1))} disabled={historyPage === 1} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold disabled:opacity-40"><ChevronLeft className="h-4 w-4" /> Anterior</button><span className="text-sm font-bold text-slate-600">Página {historyPage} de {historyPageCount}</span><button type="button" onClick={() => setHistoryPage((page) => Math.min(historyPageCount, page + 1))} disabled={historyPage === historyPageCount} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold disabled:opacity-40">Próxima <ChevronRight className="h-4 w-4" /></button></div>}</>
           )}
         </section>
 
@@ -134,7 +134,7 @@ export default function DashboardClient({ simulados, stats }: DashboardClientPro
   )
 }
 
-function HistoryRow({ simulado }: { simulado: Simulado }) {
+function HistoryRow({ simulado, canEdit }: { simulado: Simulado; canEdit: boolean }) {
   const completed = simulado.status === 'CONCLUIDO'
   const inProgress = simulado.status === 'EM_ANDAMENTO'
   const isReviewSession = simulado.pdfNome === 'Caderno de erros'
@@ -153,7 +153,7 @@ function HistoryRow({ simulado }: { simulado: Simulado }) {
         {completed ? `${Math.round(simulado.tentativa?.percentual || 0)}%` : inProgress ? 'Em andamento' : 'Nao iniciado'}
       </span>
       <div className="flex flex-wrap gap-2">
-        {!completed && !isReviewSession && (
+        {!completed && !isReviewSession && canEdit && (
           <Link href={`/dashboard/simulado/${simulado.id}/editar`} className="inline-flex items-center justify-center gap-2 border border-slate-300 rounded-xl px-4 py-2 text-sm font-bold hover:border-blue-500 hover:text-blue-700">
             <Pencil className="w-4 h-4" /> Editar
           </Link>

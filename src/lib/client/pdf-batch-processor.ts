@@ -53,6 +53,7 @@ export async function cleanupPdfProcessing(documentId: string): Promise<void> {
 export async function processPdfInBrowser(
   file: File,
   onProgress: (progress: PdfProcessingProgress) => void,
+  options: { allowOcr?: boolean } = {},
 ): Promise<{ documentId: string; totalPages: number; chunkCount: number; ocrPages: number }> {
   onProgress({
     phase: 'opening', currentPage: 0, totalPages: 0, currentBatch: 0, totalBatches: 0,
@@ -115,6 +116,9 @@ export async function processPdfInBrowser(
           .replace(/\n{3,}/g, '\n\n')
           .trim();
         if (text.length < 40) {
+          if (options.allowOcr === false) {
+            throw new Error('Este PDF precisa de OCR, recurso disponível no plano Pro. Envie um PDF com texto selecionável ou faça upgrade.');
+          }
           onProgress({
             phase: 'ocr', currentPage: pageNumber, totalPages,
             currentBatch: batchIndex + 1, totalBatches,

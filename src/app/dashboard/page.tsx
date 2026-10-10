@@ -4,6 +4,7 @@ import DashboardClient from './DashboardClient'
 import { getMonthlyUsage } from '@/lib/usage-limit'
 import { getAuthenticatedUserFromCookie } from '@/lib/server-auth'
 import { headers } from 'next/headers'
+import { getUserPlanAccess } from '@/lib/plan-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,7 +41,7 @@ export default async function DashboardPage() {
     select: { percentual: true, totalQuestoes: true },
   })
 
-  const usage = await getMonthlyUsage(user.id, user.email)
+  const [usage, access] = await Promise.all([getMonthlyUsage(user.id, user.email), getUserPlanAccess(user)])
   const average = completedAttempts.length
     ? Math.round(completedAttempts.reduce((sum, attempt) => sum + attempt.percentual, 0) / completedAttempts.length)
     : 0
@@ -67,6 +68,7 @@ export default async function DashboardPage() {
         used: usage.used,
         unlimited: usage.unlimited,
         limit: usage.limit,
+        isPro: access.planCode === 'PRO',
       }}
     />
   )

@@ -7,8 +7,10 @@ import {
   getVectorDocumentChunkCount,
   PDF_PAGE_BATCH_SIZE,
   vectorStoreMetadata,
+  listVectorMaterials,
 } from '@/lib/document-vector-store';
 import { isSupabaseVectorConfigured } from '@/lib/supabase-admin';
+import { getUserPlanAccess } from '@/lib/plan-access';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,8 +35,9 @@ export async function POST(request: NextRequest) {
   if (process.env.NEXT_PHASE === 'phase-production-build') {
     return NextResponse.json({ success: true, documentId: '00000000-0000-0000-0000-000000000000', batchSize: 1, expiresAt: new Date().toISOString() });
   }
-  const userId = await getUserId(request);
-  if (!userId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const user = await getAuthenticatedUser(request);
+  if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const userId = user.id;
   if (!isSupabaseVectorConfigured()) {
     return NextResponse.json({ error: 'Processamento em lotes não configurado' }, { status: 503 });
   }
@@ -43,6 +46,13 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: 'Dados do PDF inválidos' }, { status: 400 });
 
   try {
+    const access = await getUserPlanAccess(user);
+    if (access.materialLimit !== null) {
+      const materials = await listVectorMaterials(userId);
+      if (materials.length >= access.materialLimit) {
+        return NextResponse.json({ error: `O plano Grátis permite manter até ${access.materialLimit} materiais ativos. Arquive ou exclua um material, ou faça upgrade para o Pro.` }, { status: 403 });
+      }
+    }
     const document = await createVectorDocument({ userId, ...parsed.data });
     const reused = document.status === 'ready';
     return NextResponse.json({
