@@ -47,7 +47,6 @@ export default async function DashboardPage() {
 
   return (
     <DashboardClient
-      isAdmin={user.isAdmin ?? false}
       simulados={simulados.map((simulado) => ({
         id: simulado.id,
         titulo: simulado.titulo,

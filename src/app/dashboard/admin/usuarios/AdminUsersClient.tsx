@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Search, Shield, Trash2, UserCheck, UserX, RotateCcw, LogOut, MailX } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/components/providers'
+import AdminEngagementPanels from './AdminEngagementPanels'
 
 type ManagedUser = {
   id: string
@@ -132,6 +133,8 @@ export default function AdminUsersClient() {
       </section>
 
       <section className="mt-6 bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm"><div className="px-6 py-5 border-b border-slate-200"><h2 className="text-xl font-black">Convites pendentes</h2><p className="text-sm text-slate-500">Links ativos que ainda não foram utilizados</p></div>{invites.length === 0 ? <p className="p-8 text-center text-slate-500">Nenhum convite pendente.</p> : <div className="divide-y divide-slate-100">{invites.map((invite) => <div key={invite.id} className="p-5 flex flex-col sm:flex-row sm:items-center gap-3"><div className="flex-1"><p className="font-bold">{invite.name || 'Sem nome'}</p><p className="text-sm text-slate-500">{invite.email} · expira em {new Date(invite.expiresAt).toLocaleString('pt-BR')}</p></div><button disabled={busyId === invite.id} onClick={() => cancelInvite(invite)} className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-50"><MailX className="w-4 h-4" /> Cancelar convite</button></div>)}</div>}</section>
+
+      <AdminEngagementPanels onInviteCreated={loadUsers} />
 
       <style jsx>{`.admin-action{display:inline-flex;width:2.35rem;height:2.35rem;align-items:center;justify-content:center;border-radius:.6rem;border:1px solid #cbd5e1;background:#fff}.admin-action:hover{background:#f1f5f9}.admin-action:disabled{opacity:.35;cursor:not-allowed}.admin-action :global(svg){width:1rem;height:1rem}`}</style>
     </div>
