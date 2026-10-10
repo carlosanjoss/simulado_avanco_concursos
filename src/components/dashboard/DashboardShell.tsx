@@ -3,8 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/components/providers'
-import { useState } from 'react'
-import { BarChart3, BookOpen, CalendarDays, ChevronRight, CreditCard, FilePlus2, Files, History, Home, LibraryBig, LogOut, Menu, NotebookTabs, ReceiptText, UserRound, Users, X } from 'lucide-react'
+import { BarChart3, BookOpen, CalendarDays, CreditCard, FilePlus2, Files, History, Home, LibraryBig, LogOut, NotebookTabs, ReceiptText, UserRound, Users } from 'lucide-react'
 import { BrandLogo } from '@/components/shared/BrandLogo'
 
 const navigationSections = [
@@ -30,7 +29,6 @@ export default function DashboardShell({ children, focusMode = false }: { childr
   const pathname = usePathname()
   const router = useRouter()
   const { user, isLoading, refresh } = useAuth()
-  const [mobileOpen, setMobileOpen] = useState(false)
 
   const handleSignOut = async () => {
     await fetch('/api/auth/signout', { method: 'POST' })
@@ -63,17 +61,10 @@ export default function DashboardShell({ children, focusMode = false }: { childr
     : pathname.startsWith('/dashboard/simulado/')
       ? 'Simulado'
       : currentPage?.label || 'Área do estudante'
-  const navigationLinks = visibleSections.map((section) => (
-    <section key={section.label} className="mb-3 last:mb-0">
-      <p className="mb-1.5 px-3 text-[10px] font-black uppercase tracking-[0.18em] text-blue-300/70">{section.label}</p>
-      <div className="space-y-1">
-        {section.items.map(({ href, label, icon: Icon }) => {
-          const active = isActive(href)
-          return <Link key={href} href={href} aria-current={active ? 'page' : undefined} onClick={() => setMobileOpen(false)} className={`group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-all ${active ? 'bg-white text-blue-950 shadow-md shadow-blue-950/20' : 'text-blue-100 hover:bg-white/10 hover:text-white'}`}><Icon className={`h-[18px] w-[18px] shrink-0 ${active ? 'text-blue-700' : ''}`} /><span className="flex-1">{label}</span>{active && <ChevronRight className="h-4 w-4 text-blue-600" />}</Link>
-        })}
-      </div>
-    </section>
-  ))
+  const navigationLinks = visibleSections.flatMap((section) => section.items).map(({ href, label, icon: Icon }) => {
+    const active = isActive(href)
+    return <Link key={href} href={href} aria-current={active ? 'page' : undefined} className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-bold transition-colors ${active ? 'bg-blue-700 text-white shadow-sm' : 'text-slate-600 hover:bg-blue-50 hover:text-blue-800'}`}><Icon className="h-4 w-4" /><span>{label}</span></Link>
+  })
 
   if (isLoading) {
     return (
@@ -105,55 +96,25 @@ export default function DashboardShell({ children, focusMode = false }: { childr
   }
 
   return (
-    <div className="h-dvh overflow-hidden bg-[#f5f8fd] text-[#06183d] lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
-      <aside className="hidden h-dvh overflow-hidden border-r border-white/10 text-white lg:flex lg:flex-col avanco-navy-deep">
-        <div className="flex h-[72px] shrink-0 items-center border-b border-white/10 px-5">
-          <BrandLogo light />
+    <div className="flex h-dvh min-w-0 flex-col overflow-hidden bg-[#f5f8fd] text-[#06183d]">
+      <header className="z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-6">
+        <div className="flex min-w-0 items-center gap-4">
+          <BrandLogo compact />
+          <div className="hidden h-7 w-px bg-slate-200 sm:block" />
+          <div className="hidden min-w-0 sm:block"><p className="text-[10px] font-black uppercase tracking-[.16em] text-blue-700">Área do estudante</p><p className="truncate text-sm font-bold text-slate-800">{pageTitle}</p></div>
         </div>
-        <div className="shrink-0 px-3 pt-4">
-          <Link href="/dashboard/novo" className="flex items-center justify-center gap-2 rounded-xl bg-[#ffc400] px-4 py-3 text-sm font-black text-[#06183d] shadow-lg shadow-slate-950/20 transition hover:bg-yellow-300">
-            <FilePlus2 className="h-[18px] w-[18px]" /> Criar simulado
-          </Link>
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="hidden min-w-0 text-right md:block"><p className="truncate text-sm font-bold text-slate-700">{user.name || 'Estudante'}</p><p className="truncate text-xs text-slate-400">{user.email}</p></div>
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-black text-blue-700">{user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}</div>
+          <button onClick={handleSignOut} className="shrink-0 rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800" aria-label="Sair"><LogOut className="h-[18px] w-[18px]" /></button>
         </div>
-        <nav className="dashboard-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3" aria-label="Navegação principal">
-          {navigationLinks}
-        </nav>
-        <div className="flex shrink-0 items-center gap-3 border-t border-white/10 p-3.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-500 font-bold text-white">
-            {user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
-          </div>
-          <div className="min-w-0">
-            <p className="font-semibold text-sm truncate">{user.name || 'Estudante'}</p>
-            <p className="text-xs text-blue-200 truncate">{user.email}</p>
-          </div>
-          <button onClick={handleSignOut} className="ml-auto shrink-0 rounded-lg p-2 text-blue-100 transition hover:bg-white/10 hover:text-white" aria-label="Sair">
-            <LogOut className="h-[18px] w-[18px]" />
-          </button>
-        </div>
-      </aside>
-
-      <div className="flex h-dvh min-w-0 flex-col overflow-hidden">
-        <header className="z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <button type="button" onClick={() => setMobileOpen(true)} className="rounded-lg p-2 text-slate-700 hover:bg-slate-100 lg:hidden" aria-label="Abrir menu"><Menu className="h-5 w-5" /></button>
-            <div className="lg:hidden"><BrandLogo compact /></div>
-            <div className="hidden min-w-0 lg:block"><p className="text-[10px] font-black uppercase tracking-[.16em] text-blue-700">Avanço Simulados</p><p className="truncate text-sm font-bold text-slate-800">{pageTitle}</p></div>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="hidden text-sm font-medium text-slate-600 sm:block lg:hidden">{user.name || 'Estudante'}</span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-sm font-black text-blue-700 lg:hidden">{user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}</div>
-          </div>
-        </header>
-        <main className="dashboard-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</main>
-        {mobileOpen && <div className="lg:hidden fixed inset-0 z-50 bg-slate-950/60" role="presentation" onClick={() => setMobileOpen(false)}>
-          <aside className="flex h-dvh w-[min(86vw,320px)] flex-col overflow-hidden text-white shadow-2xl avanco-navy-deep" role="dialog" aria-modal="true" aria-label="Menu principal" onClick={(event) => event.stopPropagation()}>
-            <div className="flex h-[72px] shrink-0 items-center justify-between border-b border-white/10 px-4"><BrandLogo light /><button type="button" onClick={() => setMobileOpen(false)} className="rounded-lg p-2 hover:bg-white/10" aria-label="Fechar menu"><X className="h-5 w-5" /></button></div>
-            <div className="shrink-0 px-3 pt-4"><Link href="/dashboard/novo" onClick={() => setMobileOpen(false)} className="flex items-center justify-center gap-2 rounded-xl bg-[#ffc400] px-4 py-3 text-sm font-black text-[#06183d]"><FilePlus2 className="h-[18px] w-[18px]" /> Criar simulado</Link></div>
-            <nav className="dashboard-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3" aria-label="Navegação principal">{navigationLinks}</nav>
-            <div className="flex shrink-0 items-center gap-3 border-t border-white/10 p-4"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-500 font-bold">{user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}</div><div className="min-w-0"><p className="truncate text-sm font-semibold">{user.name || 'Estudante'}</p><p className="truncate text-xs text-blue-200">{user.email}</p></div><button onClick={handleSignOut} className="ml-auto rounded-lg p-2 text-blue-100 hover:bg-white/10" aria-label="Sair"><LogOut className="h-[18px] w-[18px]" /></button></div>
-          </aside>
-        </div>}
-      </div>
+      </header>
+      <nav className="dashboard-scrollbar flex h-[54px] shrink-0 items-center gap-1.5 overflow-x-auto overscroll-x-contain border-b border-slate-200 bg-white px-4 sm:px-6" aria-label="Navegação principal">
+        <Link href="/dashboard/novo" aria-current={pathname === '/dashboard/novo' ? 'page' : undefined} className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-black transition-colors ${pathname === '/dashboard/novo' ? 'bg-[#ffc400] text-[#06183d] shadow-sm' : 'bg-amber-50 text-amber-900 hover:bg-[#ffc400]'}`}><FilePlus2 className="h-4 w-4" /> Criar simulado</Link>
+        <span className="mx-1 h-6 w-px shrink-0 bg-slate-200" aria-hidden />
+        {navigationLinks}
+      </nav>
+      <main className="dashboard-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</main>
     </div>
   )
 }
