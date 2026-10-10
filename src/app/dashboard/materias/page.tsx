@@ -37,8 +37,8 @@ export default async function MateriasPage() {
   })
   const orderedSubjects = Array.from(subjects.entries()).sort((a, b) => b[1].questions - a[1].questions)
 
-  return <DashboardShell><div className="max-w-6xl mx-auto p-5 sm:p-8 pb-28">
-    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4"><div><p className="text-blue-700 font-bold uppercase tracking-widest text-xs">Biblioteca de conteúdo</p><h1 className="text-3xl sm:text-4xl font-black mt-2">Matérias</h1><p className="text-slate-600 mt-2">Assuntos identificados nos seus simulados e PDFs.</p></div><Link href="/dashboard/novo" className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-black text-white">Adicionar material</Link></div>
+  return <DashboardShell><div className="mx-auto max-w-6xl p-4 pb-10 sm:p-6 lg:p-7">
+    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4"><div><p className="text-blue-700 font-bold uppercase tracking-widest text-xs">Biblioteca de conteúdo</p><h1 className="mt-2 text-2xl font-black sm:text-3xl">Matérias</h1><p className="text-slate-600 mt-2">Assuntos identificados nos seus simulados e PDFs.</p></div><Link href="/dashboard/novo" className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-black text-white">Adicionar material</Link></div>
     <div className="grid sm:grid-cols-3 gap-4 mt-7">
       <Summary icon={BookOpen} value={orderedSubjects.length} label="Matérias identificadas" />
       <Summary icon={FileText} value={simulados.length} label="Materiais processados" />

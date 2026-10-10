@@ -101,4 +101,12 @@
     background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
     background-size: 34px 34px;
   }
+  .dashboard-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, .55) transparent;
+  }
+  .dashboard-scrollbar::-webkit-scrollbar { width: 7px; height: 7px; }
+  .dashboard-scrollbar::-webkit-scrollbar-track { background: transparent; }
+  .dashboard-scrollbar::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, .45); border-radius: 999px; }
+  .dashboard-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(71, 85, 105, .7); }
 }

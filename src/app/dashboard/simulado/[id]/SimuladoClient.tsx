@@ -179,7 +179,7 @@ export default function SimuladoClient({ simulado, forceRetake = false }: { simu
     const performanceMessage = percentage >= 85 ? 'Excelente desempenho!' : percentage >= 70 ? 'Muito bom! Continue avançando.' : percentage >= 50 ? 'Bom começo. Revise os pontos de atenção.' : 'Continue revisando o material e tente novamente.';
     return (
       <DashboardShell>
-        <div className="max-w-5xl mx-auto p-5 sm:p-8 pb-28">
+        <div className="mx-auto max-w-5xl p-4 pb-10 sm:p-7">
           <section className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-10 shadow-sm text-center relative overflow-hidden">
             <Award className="w-16 h-16 text-[#b77900] mx-auto" /><h1 className="text-3xl sm:text-4xl font-black mt-3">Simulado concluído!</h1><p className="text-slate-600 mt-2">{performanceMessage} Você finalizou {simulado.titulo}.</p>
             <div className="grid md:grid-cols-[300px_1fr] gap-6 mt-9 text-left">
@@ -227,7 +227,7 @@ export default function SimuladoClient({ simulado, forceRetake = false }: { simu
             <div className="mt-5 grid gap-2 border-t border-slate-100 pt-4 text-xs font-semibold text-slate-500"><span className="flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-blue-700" /> Questão atual</span><span className="flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Respondida</span></div>
           </aside>
           <main className="min-w-0">
-            <div className="overflow-x-auto pb-2 lg:hidden"><QuestionNavigator questions={questions} currentIndex={currentIndex} confirmedAnswers={confirmedAnswers} onSelect={setCurrentIndex} /></div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:hidden"><div className="flex items-center justify-between"><div><p className="font-black">Questões</p><p className="text-xs text-slate-500">Selecione uma questão disponível</p></div><span className="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700">{Object.keys(confirmedAnswers).length}/{questions.length}</span></div><QuestionNavigator questions={questions} currentIndex={currentIndex} confirmedAnswers={confirmedAnswers} onSelect={setCurrentIndex} vertical /></div>
 
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_12px_40px_rgba(15,45,95,0.07)] sm:p-8 lg:p-10">
           <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex flex-wrap gap-2"><span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black capitalize text-blue-700">{question.tipo.replaceAll('_', ' ')}</span><span className="rounded-full bg-amber-50 px-3 py-1.5 text-xs font-black text-amber-700">{question.dificuldade}</span></div><span className="text-xs font-bold uppercase tracking-wider text-slate-400">Questão {question.id}</span></div>

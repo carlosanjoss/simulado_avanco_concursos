@@ -102,17 +102,17 @@ export default function AdminUsersClient() {
   }
 
   return (
-    <div className="p-5 sm:p-8 pb-24 max-w-[1500px] mx-auto">
+    <div className="mx-auto max-w-7xl p-4 pb-10 sm:p-6 lg:p-7">
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
-        <div><p className="text-blue-700 font-bold uppercase tracking-widest text-xs">Administração</p><h1 className="text-3xl sm:text-4xl font-black mt-2">Usuários</h1><p className="text-slate-500 mt-1">Controle acessos, funções, consumo e exclusão de contas.</p></div>
+        <div><p className="text-blue-700 font-bold uppercase tracking-widest text-xs">Administração</p><h1 className="mt-2 text-2xl font-black sm:text-3xl">Usuários</h1><p className="text-slate-500 mt-1">Controle acessos, funções, consumo e exclusão de contas.</p></div>
         <label className="relative block w-full lg:w-96"><Search className="absolute left-4 top-3.5 w-5 h-5 text-slate-400" /><input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1) }} placeholder="Buscar por nome ou e-mail" className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-11 pr-4 outline-none focus:ring-2 focus:ring-blue-600" /></label>
       </div>
 
       <section className="mt-7 bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
         <div className="px-6 py-5 border-b border-slate-200"><h2 className="text-xl font-black">Contas cadastradas</h2><p className="text-sm text-slate-500">{total} usuário{total === 1 ? '' : 's'} no total</p></div>
-        <div className="overflow-x-auto">
+        <div className="dashboard-scrollbar max-h-[min(52vh,560px)] overflow-auto">
           <table className="w-full min-w-[1050px] text-sm">
-            <thead className="bg-slate-50 text-left text-slate-600"><tr><th className="px-5 py-3">Usuário</th><th className="px-5 py-3">Acesso</th><th className="px-5 py-3">Uso</th><th className="px-5 py-3">Atividade</th><th className="px-5 py-3">Cadastro / acesso</th><th className="px-5 py-3 text-right">Ações</th></tr></thead>
+            <thead className="sticky top-0 z-10 bg-slate-50 text-left text-slate-600"><tr><th className="px-5 py-3">Usuário</th><th className="px-5 py-3">Acesso</th><th className="px-5 py-3">Uso</th><th className="px-5 py-3">Atividade</th><th className="px-5 py-3">Cadastro / acesso</th><th className="px-5 py-3 text-right">Ações</th></tr></thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-500">Carregando usuários...</td></tr> : users.length === 0 ? <tr><td colSpan={6} className="px-5 py-12 text-center text-slate-500">Nenhum usuário encontrado.</td></tr> : users.map((user) => {
                 const disabled = busyId === user.id

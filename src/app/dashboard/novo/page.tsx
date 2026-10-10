@@ -134,10 +134,10 @@ export default function NovoSimuladoPage() {
 
   return (
     <DashboardShell>
-      <div className="max-w-4xl mx-auto p-5 sm:p-8 pb-28">
+      <div className="mx-auto max-w-4xl p-4 pb-10 sm:p-6 lg:p-7">
         <button onClick={() => router.push('/dashboard')} className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-blue-700 mb-5"><ArrowLeft className="w-4 h-4" /> Voltar para o dashboard</button>
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-          <div><p className="text-blue-700 font-bold uppercase tracking-widest text-xs">Novo simulado</p><h1 className="text-3xl sm:text-4xl font-black mt-2">Criar Novo Simulado</h1><p className="text-slate-500 mt-1">Envie seu material em PDF e informe os tópicos que deseja focar.</p></div>
+          <div><p className="text-blue-700 font-bold uppercase tracking-widest text-xs">Novo simulado</p><h1 className="mt-2 text-2xl font-black sm:text-3xl">Criar novo simulado</h1><p className="text-slate-500 mt-1">Envie seu material em PDF e informe os tópicos que deseja focar.</p></div>
           <div className="flex gap-2"><span className={`px-3 py-2 rounded-xl text-xs font-bold ${aiAvailable ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>{aiAvailable === null ? 'Verificando IA...' : aiAvailable ? 'OpenRouter disponível' : 'OpenRouter não configurada'}</span><span className="px-3 py-2 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold">{unlimited ? 'Gerações ilimitadas' : `${remaining ?? '—'} gerações neste mês`}</span></div>
         </div>
 

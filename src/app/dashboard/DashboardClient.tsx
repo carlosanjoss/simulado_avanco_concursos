@@ -116,10 +116,10 @@ export default function DashboardClient({ simulados, stats, isAdmin }: Dashboard
 
   return (
     <DashboardShell>
-      <div className="p-5 sm:p-8 pb-24 max-w-[1500px] mx-auto">
+      <div className="mx-auto max-w-7xl p-4 pb-10 sm:p-6 lg:p-7">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl sm:text-4xl font-black text-[#06183d]">Ola, {user?.name || 'Estudante'}! <span aria-hidden>👋</span></h1>
+            <h1 className="text-2xl font-black text-[#06183d] sm:text-3xl">Olá, {user?.name || 'Estudante'}! <span aria-hidden>👋</span></h1>
             <p className="text-slate-500 mt-1">Continue sua jornada de estudos. Cada questao e um passo adiante.</p>
           </div>
           <div className="bg-white border border-slate-200 rounded-2xl px-5 py-3 flex items-center gap-4 min-w-[220px]">
@@ -145,7 +145,7 @@ export default function DashboardClient({ simulados, stats, isAdmin }: Dashboard
 
         <section id="estatisticas" className="scroll-margin-top-20 grid sm:grid-cols-2 xl:grid-cols-4 gap-4 mt-7">
           {statCards.map(({ label, value, icon: Icon, color }) => (
-            <article key={label} className="bg-white border border-slate-200 rounded-2xl p-5 flex items-center gap-4 shadow-sm">
+            <article key={label} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <span className={`w-12 h-12 rounded-full flex items-center justify-center ${color}`}>
                 <Icon className="w-6 h-6" />
               </span>
@@ -157,16 +157,16 @@ export default function DashboardClient({ simulados, stats, isAdmin }: Dashboard
           ))}
         </section>
 
-        <section className="relative mt-6 overflow-hidden rounded-3xl avanco-navy text-white min-h-[210px] px-7 sm:px-10 py-8 flex items-center avanco-grid">
+        <section className="relative mt-6 flex min-h-[185px] items-center overflow-hidden rounded-2xl px-6 py-7 text-white avanco-navy avanco-grid sm:px-8">
           <div className="relative z-10 max-w-xl">
             <p className="text-[#ffc400] uppercase tracking-widest text-xs font-bold">Pratique com seu proprio material</p>
-            <h2 className="text-3xl sm:text-4xl font-black mt-2">Crie um novo simulado</h2>
+            <h2 className="mt-2 text-2xl font-black sm:text-3xl">Crie um novo simulado</h2>
             <p className="text-blue-100 mt-2">Envie seu PDF e escolha a quantidade e a dificuldade das questões.</p>
             <Link href="/dashboard/novo" className="inline-flex items-center gap-2 bg-[#ffc400] text-[#06183d] rounded-xl px-6 py-3 font-black mt-6 hover:bg-yellow-300">
               <FilePlus2 className="w-5 h-5" /> Novo Simulado
             </Link>
           </div>
-          <Image src="/images/quiz-study.png" alt="Notebook com simulado" width={650} height={490} className="hidden md:block absolute right-[-25px] bottom-[-115px] w-[440px] h-auto opacity-95" />
+          <Image src="/images/quiz-study.png" alt="Notebook com simulado" width={650} height={490} className="absolute bottom-[-105px] right-[-20px] hidden h-auto w-[390px] opacity-95 md:block" />
         </section>
 
         <section id="historico" className="scroll-margin-top-20 mt-6 bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
@@ -178,7 +178,7 @@ export default function DashboardClient({ simulados, stats, isAdmin }: Dashboard
             <span className="text-sm text-blue-700 font-semibold">{simulados.length} no total</span>
           </div>
           {simulados.length === 0 ? (
-            <div className="py-16 px-6 text-center">
+            <div className="px-6 py-12 text-center">
               <span className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center mx-auto">
                 <FileText className="w-8 h-8" />
               </span>
@@ -259,9 +259,9 @@ export default function DashboardClient({ simulados, stats, isAdmin }: Dashboard
                   <p className="text-sm text-slate-500">Relatos enviados pelos usuarios sobre questoes</p>
                 </div>
               </div>
-              <div className="divide-y divide-slate-100 overflow-x-auto">
-                <table className="w-full">
-                  <thead>
+              <div className="dashboard-scrollbar max-h-[min(50vh,460px)] divide-y divide-slate-100 overflow-auto">
+                <table className="w-full min-w-[980px]">
+                  <thead className="sticky top-0 z-10 bg-slate-50">
                     <tr className="bg-slate-50 text-left text-sm font-semibold text-slate-600">
                       <th className="px-4 py-3">Usuario</th>
                       <th className="px-4 py-3">Simulado</th>
