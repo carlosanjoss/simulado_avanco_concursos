@@ -3,12 +3,15 @@ import { z } from 'zod';
 import { getAuthenticatedUser } from '@/lib/server-auth';
 import {
   getVectorDocument,
+  getOcrDocumentSummary,
   MAX_BATCH_TEXT_LENGTH,
   PDF_PAGE_BATCH_SIZE,
   processVectorBatch,
+  storeOcrPageMetadata,
 } from '@/lib/document-vector-store';
 import { checkPdfBatchRateLimit, getClientIp } from '@/lib/rate-limit';
 import { isSupabaseVectorConfigured } from '@/lib/supabase-admin';
+import { getUserPlanAccess } from '@/lib/plan-access';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -17,6 +20,7 @@ export const dynamic = 'force-dynamic';
 const pageSchema = z.object({
   pageNumber: z.number().int().min(1).max(400),
   text: z.string().max(200_000),
+  ocr: z.object({ confidence: z.number().int().min(0).max(100), language: z.enum(['por', 'eng', 'spa', 'fra']), reason: z.enum(['empty', 'partial']), reviewed: z.boolean() }).strict().optional(),
 }).strict();
 
 const batchSchema = z.object({
@@ -29,8 +33,9 @@ export async function POST(request: NextRequest) {
   if (process.env.NEXT_PHASE === 'phase-production-build') {
     return NextResponse.json({ success: true, batchIndex: 0 });
   }
-  const userId = (await getAuthenticatedUser(request))?.id;
-  if (!userId) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const user = await getAuthenticatedUser(request);
+  if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const userId = user.id;
   if (!isSupabaseVectorConfigured()) {
     return NextResponse.json({ error: 'Processamento em lotes não configurado' }, { status: 503 });
   }
@@ -53,6 +58,15 @@ export async function POST(request: NextRequest) {
     if (batchIndex >= document.total_batches) {
       return NextResponse.json({ error: 'Índice do lote inválido.' }, { status: 400 });
     }
+    const incomingOcrPages = pages.filter((page) => page.ocr).length;
+    if (incomingOcrPages > 0) {
+      const access = await getUserPlanAccess(user);
+      if (!access.ocr) return NextResponse.json({ error: 'O processamento OCR está disponível no plano Pro.' }, { status: 403 });
+      const summary = await getOcrDocumentSummary(documentId);
+      const knownPages = new Set(summary.pageNumbers);
+      const newPages = pages.filter((page) => page.ocr && !knownPages.has(page.pageNumber)).length;
+      if (summary.pages + newPages > (document.ocr_page_limit || 40)) return NextResponse.json({ error: `O limite é de ${document.ocr_page_limit || 40} páginas OCR por material.` }, { status: 413 });
+    }
 
     const expectedStart = batchIndex * PDF_PAGE_BATCH_SIZE + 1;
     const expectedEnd = Math.min(document.total_pages, expectedStart + PDF_PAGE_BATCH_SIZE - 1);
@@ -63,6 +77,7 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await processVectorBatch({ document, batchIndex, pages });
+    await storeOcrPageMetadata({ documentId, userId, pages: pages.flatMap((page) => page.ocr ? [{ pageNumber: page.pageNumber, text: page.text, ...page.ocr }] : []) });
     return NextResponse.json({ success: true, batchIndex, ...result });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';

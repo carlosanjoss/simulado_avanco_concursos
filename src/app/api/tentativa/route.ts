@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
 
     const simulado = await prisma.simulado.findFirst({
       where: { id: body.simuladoId, userId: user.id, deletedAt: null },
-      select: { id: true, questoesJson: true },
+      select: { id: true, questoesJson: true, scoringMode: true, examMode: true },
     })
     if (!simulado) return NextResponse.json({ error: 'Simulado não encontrado' }, { status: 404 })
     const questions = JSON.parse(simulado.questoesJson) as Question[]
@@ -50,13 +50,16 @@ export async function POST(request: NextRequest) {
     const selectedAnswers = { ...storedSelected, ...body.selectedAnswers, ...respostas }
 
     if (body.isFinal) {
-      if (Object.keys(respostas).length !== questions.length) {
+      if (Object.keys(respostas).length !== questions.length && !simulado.examMode) {
         return NextResponse.json({ error: 'Responda todas as questões antes de finalizar.' }, { status: 409 })
       }
+      if (simulado.examMode) questions.forEach((question) => { if (!respostas[question.id]) respostas[question.id] = '__BLANK__' })
       const objectiveQuestions = questions.filter((question) => question.tipo !== 'discursiva')
-      const pontuacao = objectiveQuestions.filter(
+      const correctCount = objectiveQuestions.filter(
         (question) => evaluateAnswer(question, respostas[question.id]).correct,
       ).length
+      const incorrectCount = objectiveQuestions.filter((question) => respostas[question.id] !== '__BLANK__' && !evaluateAnswer(question, respostas[question.id]).correct).length
+      const pontuacao = simulado.scoringMode === 'NEGATIVE_ONE' ? correctCount - incorrectCount : correctCount
       const percentual = objectiveQuestions.length ? (pontuacao / objectiveQuestions.length) * 100 : 0
       const now = new Date()
       const durationSeconds = Math.max(1, body.elapsedSeconds ?? existing?.durationSeconds ?? 0)
@@ -74,6 +77,7 @@ export async function POST(request: NextRequest) {
               currentIndex: questions.length - 1,
               concluidoEm: now,
               durationSeconds,
+              markedQuestions: JSON.stringify(body.markedQuestions),
             },
           })
         : await prisma.tentativa.create({
@@ -88,6 +92,7 @@ export async function POST(request: NextRequest) {
               currentIndex: questions.length - 1,
               concluidoEm: now,
               durationSeconds,
+              markedQuestions: JSON.stringify(body.markedQuestions),
             },
           })
 
@@ -112,12 +117,14 @@ export async function POST(request: NextRequest) {
         percentual: 0,
         currentIndex: body.currentIndex ?? 0,
         durationSeconds: body.elapsedSeconds ?? 0,
+        markedQuestions: JSON.stringify(body.markedQuestions),
       },
       update: {
         respostas: JSON.stringify(respostas),
         selectedAnswers: JSON.stringify(selectedAnswers),
         currentIndex: body.currentIndex ?? existing?.currentIndex ?? 0,
         durationSeconds: body.elapsedSeconds ?? existing?.durationSeconds ?? 0,
+        markedQuestions: JSON.stringify(body.markedQuestions),
       },
     })
     await prisma.simulado.update({ where: { id: simulado.id }, data: { status: 'EM_ANDAMENTO' } })
@@ -177,6 +184,7 @@ export async function GET(request: NextRequest) {
         evaluations,
         completed: Boolean(tentativa.concluidoEm),
         elapsedSeconds,
+        markedQuestions: (() => { try { return JSON.parse(tentativa.markedQuestions || '[]') } catch { return [] } })(),
         result: tentativa.concluidoEm ? {
           score: tentativa.pontuacao,
           percentage: tentativa.percentual,

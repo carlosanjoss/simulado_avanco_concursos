@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { email, name } = body
+    const { email, name, resend, preview } = body
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: 'E-mail inválido' }, { status: 400 })
@@ -31,7 +31,6 @@ export async function POST(request: NextRequest) {
     if (existingUser && existingUser.password) {
       return NextResponse.json({ error: 'Este e-mail já está cadastrado' }, { status: 400 })
     }
-    // Se existe mas sem senha (usuário legado), permite reenviar convite para ele definir a senha.
 
     // Verificar se já existe convite pendente
     const existingInvite = await prisma.pendingInvite.findUnique({
@@ -39,7 +38,14 @@ export async function POST(request: NextRequest) {
     })
 
     if (existingInvite && !existingInvite.used && existingInvite.expiresAt > new Date()) {
-      return NextResponse.json({ error: 'Já existe um convite pendente para este e-mail' }, { status: 400 })
+      if (!resend && !preview) {
+        return NextResponse.json({
+          error: 'Já existe um convite pendente para este e-mail',
+          inviteId: existingInvite.id,
+          expiresAt: existingInvite.expiresAt
+        }, { status: 400 })
+      }
+      // Reenviar: atualiza token e expiração
     }
 
     // Gerar token único
@@ -47,8 +53,20 @@ export async function POST(request: NextRequest) {
     const inviteTokenHash = crypto.createHash('sha256').update(inviteToken).digest('hex')
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 dias
 
-    // Criar convite
-    await prisma.pendingInvite.upsert({
+    // URL do convite
+    const inviteUrl = buildInviteUrl(inviteToken)
+
+    // Se for preview, não salva no banco e não envia e-mail
+    if (preview) {
+      return NextResponse.json({
+        success: true,
+        preview: true,
+        inviteUrl,
+      })
+    }
+
+    // Criar ou atualizar convite
+    const invite = await prisma.pendingInvite.upsert({
       where: { email: normalizedEmail },
       create: {
         email: normalizedEmail,
@@ -64,14 +82,11 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // URL do convite
-    const inviteUrl = buildInviteUrl(inviteToken)
-
     await prisma.adminAuditLog.create({
       data: {
         actorUserId: adminUser.id,
         targetUserId: existingUser?.id,
-        action: 'USER_INVITED',
+        action: resend ? 'USER_INVITE_RESENT' : 'USER_INVITED',
         metadata: JSON.stringify({ email: normalizedEmail }),
       },
     })
@@ -90,7 +105,7 @@ export async function POST(request: NextRequest) {
       emailTransport: emailResult.transport,
       emailConfigured: isEmailConfigured(),
       message: emailResult.sent
-        ? 'Convite enviado por e-mail'
+        ? (resend ? 'Convite reenviado por e-mail' : 'Convite enviado por e-mail')
         : isEmailConfigured()
           ? 'Convite criado, mas o e-mail não pôde ser enviado. Copie o link manualmente.'
           : 'Convite criado. E-mail não configurado — copie o link manualmente.',

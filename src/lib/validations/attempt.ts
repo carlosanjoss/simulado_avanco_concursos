@@ -17,6 +17,7 @@ export const attemptSubmissionSchema = z.object({
   currentIndex: z.number().int().min(0).max(49).optional(),
   elapsedSeconds: z.number().int().min(0).max(31_536_000).optional(),
   totalQuestoes: z.number().int().min(5).max(50).optional(),
+  markedQuestions: z.array(z.number().int().min(1).max(50)).max(50).default([]),
   isFinal: z.boolean().default(false),
 }).strict();
 

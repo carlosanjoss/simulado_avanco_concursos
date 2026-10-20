@@ -8,7 +8,7 @@ import { getUserPlanAccess } from '@/lib/plan-access';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const finalizeSchema = z.object({ documentId: z.string().uuid(), ocrPages: z.number().int().min(0).max(400).default(0) }).strict();
+const finalizeSchema = z.object({ documentId: z.string().uuid(), ocrPages: z.number().int().min(0).max(400).default(0), ocrLanguage: z.enum(['por', 'eng', 'spa', 'fra']).optional(), ocrConfidence: z.number().int().min(0).max(100).nullable().optional() }).strict();
 
 export async function POST(request: NextRequest) {
   if (process.env.NEXT_PHASE === 'phase-production-build') {
@@ -27,6 +27,8 @@ export async function POST(request: NextRequest) {
   if (parsed.data.ocrPages > 0 && !access.ocr) {
     return NextResponse.json({ error: 'O processamento OCR está disponível no plano Pro.' }, { status: 403 });
   }
+  const maxOcrPages = Math.max(1, Math.min(400, Number(process.env.MAX_OCR_PAGES_PER_DOCUMENT) || 40));
+  if (parsed.data.ocrPages > maxOcrPages) return NextResponse.json({ error: `O limite é de ${maxOcrPages} páginas OCR por material.` }, { status: 413 });
 
   try {
     const document = await getVectorDocument(parsed.data.documentId, userId);
@@ -34,7 +36,7 @@ export async function POST(request: NextRequest) {
     if (access.materialLimit !== null && document.status !== 'ready' && (await listVectorMaterials(userId)).length >= access.materialLimit) {
       return NextResponse.json({ error: `O plano Grátis permite até ${access.materialLimit} materiais ativos.` }, { status: 403 });
     }
-    const result = await finalizeVectorDocument(document, parsed.data.ocrPages);
+    const result = await finalizeVectorDocument(document, parsed.data.ocrPages, parsed.data.ocrLanguage, parsed.data.ocrConfidence);
     return NextResponse.json({ success: true, documentId: document.id, ...result });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido';

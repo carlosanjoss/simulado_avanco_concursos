@@ -15,6 +15,13 @@ interface SimuladoClientData {
   pdfNome: string
   questoesJson: PublicQuestion[]
   createdAt: string
+  assessmentKind: string
+  examBoard: string
+  examMode: boolean
+  scoringMode: string
+  timeLimitMinutes: number | null
+  pauseAllowed: boolean
+  feedbackMode: string
 }
 
 async function getSimulado(simuladoId: string, userId: string) {
@@ -31,6 +38,13 @@ async function getSimulado(simuladoId: string, userId: string) {
       pdfNome: true,
       questoesJson: true,
       createdAt: true,
+      assessmentKind: true,
+      examBoard: true,
+      examMode: true,
+      scoringMode: true,
+      timeLimitMinutes: true,
+      pauseAllowed: true,
+      feedbackMode: true,
     },
   })
 

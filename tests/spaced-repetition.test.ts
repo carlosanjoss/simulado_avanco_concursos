@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { nextReviewSchedule } from '@/lib/spaced-repetition'
+import { estimateRetention, nextReviewSchedule } from '@/lib/spaced-repetition'
 
 const now = new Date('2026-10-09T12:00:00.000Z')
 
@@ -27,5 +27,22 @@ describe('spaced repetition schedule', () => {
     const result = nextReviewSchedule({ repetitions: 4, intervalDays: 24, easeFactor: 2.3 }, 5, now)
     expect(result.repetitions).toBe(5)
     expect(result.masteredAt?.toISOString()).toBe(now.toISOString())
+  })
+
+  it('repeats content errors sooner than attention errors', () => {
+    const state = { repetitions: 2, intervalDays: 6, easeFactor: 2.5 }
+    const content = nextReviewSchedule(state, 3, now, 'CONTENT')
+    const attention = nextReviewSchedule(state, 3, now, 'ATTENTION')
+    expect(content.repetitions).toBe(0)
+    expect(content.lapses).toBe(1)
+    expect(attention.repetitions).toBe(3)
+    expect(attention.intervalDays).toBeGreaterThan(content.intervalDays)
+  })
+
+  it('reduces estimated retention as time passes', () => {
+    const state = { repetitions: 2, intervalDays: 6, easeFactor: 2.5, dueAt: new Date('2026-10-15T12:00:00.000Z'), lastReviewedAt: now }
+    const early = estimateRetention(state, new Date('2026-10-10T12:00:00.000Z'))
+    const late = estimateRetention(state, new Date('2026-10-20T12:00:00.000Z'))
+    expect(early).toBeGreaterThan(late)
   })
 })

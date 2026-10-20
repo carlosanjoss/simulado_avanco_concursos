@@ -5,6 +5,7 @@ import {
   createVectorDocument,
   deleteVectorDocument,
   getVectorDocumentChunkCount,
+  getOcrDocumentSummary,
   PDF_PAGE_BATCH_SIZE,
   vectorStoreMetadata,
   listVectorMaterials,
@@ -53,16 +54,22 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: `O plano Grátis permite manter até ${access.materialLimit} materiais ativos. Arquive ou exclua um material, ou faça upgrade para o Pro.` }, { status: 403 });
       }
     }
-    const document = await createVectorDocument({ userId, ...parsed.data });
+    const maxOcrPages = Math.max(1, Math.min(400, Number(process.env.MAX_OCR_PAGES_PER_DOCUMENT) || 40));
+    const document = await createVectorDocument({ userId, ...parsed.data, ocrPageLimit: maxOcrPages });
     const reused = document.status === 'ready';
+    const ocrSummary = reused || document.processed_batches > 0 ? await getOcrDocumentSummary(document.id) : { pages: 0, confidence: null, pageNumbers: [] };
     return NextResponse.json({
       success: true,
       documentId: document.id,
       batchSize: vectorStoreMetadata.batchSize,
       expiresAt: document.expires_at,
       reused,
-      ocrPages: document.ocr_pages || 0,
+      ocrPages: document.status === 'ready' ? document.ocr_pages || 0 : ocrSummary.pages,
       chunkCount: reused ? await getVectorDocumentChunkCount(document.id) : 0,
+      processedBatches: document.processed_batches || 0,
+      maxOcrPages: document.ocr_page_limit || maxOcrPages,
+      ocrLanguage: document.ocr_language || null,
+      ocrConfidence: document.ocr_confidence ?? ocrSummary.confidence,
     });
   } catch (error) {
     console.error('PDF batch session failed:', error instanceof Error ? error.message : 'Erro desconhecido');

@@ -6,10 +6,12 @@ Referências oficiais: [assinaturas na Nuvemshop](https://atendimento.nuvemshop.
 
 1. Ative o Nuvem Pago com cartão e o recurso de assinaturas na loja.
 2. Cadastre os produtos digitais `Avanço Pro mensal` e `Avanço Pro anual`.
-3. Use os SKUs `AVANCO_PRO_MONTHLY` e `AVANCO_PRO_ANNUAL`, ou configure os IDs nas variáveis de ambiente.
-4. Preencha as variáveis `NUVEMSHOP_*`, defina `NEXT_PUBLIC_APP_URL` com o domínio público e execute `npm run nuvemshop:webhooks` para registrar `order/paid` com o cabeçalho secreto.
+3. Use os SKUs `AVANCO_PRO_MONTHLY` e `AVANCO_PRO_ANNUAL`, ou configure os IDs de produto e variante nas variáveis `NUVEMSHOP_PRO_*_PRODUCT_ID` e `NUVEMSHOP_PRO_*_VARIANT_ID`.
+4. Preencha as variáveis `NUVEMSHOP_*`, incluindo `NUVEMSHOP_APP_SECRET`, defina `NEXT_PUBLIC_APP_URL` com o domínio público e execute `npm run nuvemshop:webhooks` para registrar `order/paid`, `order/cancelled` e `order/voided`.
 5. O comprador deve usar o mesmo e-mail da conta Avanço. O webhook consulta o pedido na API antes de conceder acesso.
-6. Eventos são persistidos em `PaymentEvent`; o processamento possui trava idempotente para que pedidos repetidos ou simultâneos não estendam o plano duas vezes.
+6. O handler valida o HMAC oficial sobre o corpo bruto, relê o pedido na API e persiste cada evento em `PaymentEvent`; a trava idempotente impede que entregas repetidas estendam o plano duas vezes.
+
+A Nuvemshop não expõe um webhook `order/refunded`. Reembolsos aparecem como `payment_status=refunded`; por isso, a sincronização autenticada de `/api/billing/status?sync=1` relê o pedido atual e revoga o acesso quando encontra `refunded` ou `voided`.
 
 O cancelamento da assinatura ainda é realizado no painel da Nuvemshop. O suporte deve cancelar a recorrência e depois marcar a assinatura como cancelada em `/dashboard/admin/financeiro`. O acesso permanece válido até o fim do período já pago.
 

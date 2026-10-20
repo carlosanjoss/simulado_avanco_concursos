@@ -16,18 +16,28 @@ describe('quiz JSON schema', () => {
     invalid.questoes[0].opcoes[0] = 'Alternativa sem letra';
     expect(() => parseQuizResponse(JSON.stringify(invalid))).toThrow();
   });
+
+  it('accepts five alternatives and certo/errado formats', () => {
+    const five = makeValidQuiz();
+    five.questoes[0].opcoes.push('E) Quinta alternativa plausível');
+    expect(parseQuizResponse(JSON.stringify(five)).questoes[0].opcoes).toHaveLength(5);
+
+    const trueFalse = makeValidQuiz();
+    trueFalse.questoes[0] = { ...trueFalse.questoes[0], tipo: 'certo_errado', opcoes: ['Certo', 'Errado'], resposta_correta: 'Certo' } as typeof trueFalse.questoes[0];
+    expect(parseQuizResponse(JSON.stringify(trueFalse)).questoes[0].tipo).toBe('certo_errado');
+  });
 });
 
 describe('quiz batch schema', () => {
   it('accepts exactly one sequential question for the requested block', () => {
     const quiz = makeValidQuiz();
     const batch = { titulo: quiz.titulo, questoes: quiz.questoes.slice(10, 11) };
-    expect(parseQuizBatchResponse(JSON.stringify(batch), 11).questoes).toHaveLength(1);
+    expect(parseQuizBatchResponse(JSON.stringify(batch), 11, 1).questoes).toHaveLength(1);
   });
 
   it('rejects a block with IDs from another range', () => {
     const quiz = makeValidQuiz();
     const batch = { titulo: quiz.titulo, questoes: quiz.questoes.slice(0, 1) };
-    expect(() => parseQuizBatchResponse(JSON.stringify(batch), 11)).toThrow(/ID da questão deve ser 11/);
+    expect(() => parseQuizBatchResponse(JSON.stringify(batch), 11, 1)).toThrow(/IDs das questões devem ser sequenciais a partir de 11/);
   });
 });

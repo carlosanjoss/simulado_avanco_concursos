@@ -7,10 +7,12 @@ import { ArrowLeft, BrainCircuit, Check, FileText, LibraryBig, Loader2, Sparkles
 import { toast } from 'sonner';
 import DashboardShell from '@/components/dashboard/DashboardShell';
 import { readGenerationStream, type GenerationProgress } from '@/lib/client/generation-stream';
-import { processPdfInBrowser, type PdfProcessingProgress } from '@/lib/client/pdf-batch-processor';
+import { clearPendingPdf, loadPendingPdf, processPdfInBrowser, savePendingPdf, type PdfProcessingProgress } from '@/lib/client/pdf-batch-processor';
+import type { OcrLanguage } from '@/lib/ocr';
 
 interface StoredMaterial { id: string; fileName: string; fileSize: number; totalPages: number; ocrPages: number }
-interface PlanAccess { planCode: 'FREE' | 'PRO'; maxQuestionsPerQuiz: number; materialLimit: number | null; maxMaterialsPerQuiz: number; ocr: boolean }
+interface PlanAccess { planCode: 'FREE' | 'PRO'; maxQuestionsPerQuiz: number; materialLimit: number | null; maxMaterialsPerQuiz: number; ocr: boolean; examBoardModes?: boolean }
+interface OcrReviewRequest { pageNumber: number; text: string; confidence: number; reason: 'empty' | 'partial'; resolve: (result: { text: string; reviewed: boolean }) => void }
 
 function allocateQuestions(total: number, ids: string[], weights: Record<string, number>) {
   if (ids.length === 0) return [];
@@ -43,7 +45,18 @@ export default function NovoSimuladoPage() {
   const [materialError, setMaterialError] = useState('');
   const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([]);
   const [materialWeights, setMaterialWeights] = useState<Record<string, number>>({});
-  const [access, setAccess] = useState<PlanAccess>({ planCode: 'FREE', maxQuestionsPerQuiz: 20, materialLimit: 3, maxMaterialsPerQuiz: 1, ocr: false });
+  const [access, setAccess] = useState<PlanAccess>({ planCode: 'FREE', maxQuestionsPerQuiz: 20, materialLimit: 3, maxMaterialsPerQuiz: 1, ocr: false, examBoardModes: false });
+  const [ocrLanguage, setOcrLanguage] = useState<OcrLanguage>('por');
+  const [reviewOcrText, setReviewOcrText] = useState(false);
+  const [ocrReview, setOcrReview] = useState<OcrReviewRequest | null>(null);
+  const [ocrReviewText, setOcrReviewText] = useState('');
+  const [examBoard, setExamBoard] = useState<'GENERIC' | 'CEBRASPE' | 'FGV' | 'FCC' | 'VUNESP' | 'AOCP'>('GENERIC');
+  const [answerFormat, setAnswerFormat] = useState<'FOUR_OPTIONS' | 'FIVE_OPTIONS' | 'TRUE_FALSE'>('FOUR_OPTIONS');
+  const [examMode, setExamMode] = useState(false);
+  const [timeLimitMinutes, setTimeLimitMinutes] = useState(0);
+  const [pauseAllowed, setPauseAllowed] = useState(true);
+  const [assessmentKind, setAssessmentKind] = useState<'PRACTICE' | 'DIAGNOSTIC'>('PRACTICE');
+  const [examNoticeId, setExamNoticeId] = useState('');
 
   useEffect(() => {
     Promise.all([
@@ -66,7 +79,21 @@ export default function NovoSimuladoPage() {
       setMaterials(available);
       const requestedMaterial = new URLSearchParams(window.location.search).get('material');
       if (requestedMaterial && available.some((item) => item.id === requestedMaterial)) { setSelectedMaterialIds([requestedMaterial]); setMaterialWeights({ [requestedMaterial]: 1 }); }
+      const requestedFocus = new URLSearchParams(window.location.search).get('focus');
+      if (requestedFocus) setFocusTopics(requestedFocus.slice(0, 500));
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('diagnostic') === '1') { setAssessmentKind('DIAGNOSTIC'); setExamMode(true); setQuestionCount(10); }
+      if (params.get('edital')) setExamNoticeId(params.get('edital')!.slice(0, 120));
     }).catch(() => setAiAvailable(false));
+  }, []);
+
+  useEffect(() => {
+    loadPendingPdf().then((pending) => {
+      if (!pending) return;
+      setPdfFile((current) => current || pending.file);
+      setOcrLanguage(pending.language);
+      toast.info('Encontramos um PDF interrompido. Você pode continuar o processamento de onde parou.');
+    }).catch(() => undefined);
   }, []);
 
   const onDrop = useCallback((acceptedFiles: File[], rejectedFiles: unknown[]) => {
@@ -75,6 +102,7 @@ export default function NovoSimuladoPage() {
       return;
     }
     setPdfFile(acceptedFiles[0]);
+    clearPendingPdf().catch(() => undefined);
     setSelectedMaterialIds([]);
     setMaterialWeights({});
   }, []);
@@ -102,7 +130,16 @@ export default function NovoSimuladoPage() {
         formData.append('materialWeights', JSON.stringify(Object.fromEntries(selectedMaterials.map((item) => [item.id, materialWeights[item.id] || 1]))));
         formData.append('ocrUsed', String(selectedMaterials.some((item) => item.ocrPages > 0)));
       } else if (batchProcessingAvailable && pdfFile) {
-        const processed = await processPdfInBrowser(pdfFile, setPdfProgress, { allowOcr: access.ocr });
+        await savePendingPdf(pdfFile, ocrLanguage);
+        const processed = await processPdfInBrowser(pdfFile, setPdfProgress, {
+          allowOcr: access.ocr,
+          ocrLanguage,
+          reviewOcrPage: async (page) => {
+            if (!reviewOcrText && page.confidence >= 60) return { text: page.text, reviewed: false };
+            return new Promise((resolve) => { setOcrReviewText(page.text); setOcrReview({ ...page, resolve }); });
+          },
+        });
+        await clearPendingPdf();
         formData.append('documentId', processed.documentId);
         formData.append('ocrUsed', String(processed.ocrPages > 0));
         setPdfProgress(null);
@@ -112,6 +149,13 @@ export default function NovoSimuladoPage() {
       if (focusTopics.trim()) formData.append('focusTopics', focusTopics.trim());
       formData.append('questionCount', String(questionCount));
       formData.append('difficulty', difficulty);
+      formData.append('examBoard', examBoard);
+      formData.append('answerFormat', answerFormat);
+      formData.append('examMode', String(examMode));
+      formData.append('timeLimitMinutes', String(timeLimitMinutes));
+      formData.append('pauseAllowed', String(pauseAllowed));
+      formData.append('assessmentKind', assessmentKind);
+      if (examNoticeId) formData.append('examNoticeId', examNoticeId);
 
       setGenerationProgress({
         phase: 'retrieving', completed: 0, total: questionCount, failed: 0, attempt: 1,
@@ -144,7 +188,7 @@ export default function NovoSimuladoPage() {
         <button onClick={() => router.push('/dashboard')} className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-blue-700 mb-5"><ArrowLeft className="w-4 h-4" /> Voltar para o dashboard</button>
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div><p className="text-blue-700 font-bold uppercase tracking-widest text-xs">Novo simulado</p><h1 className="mt-2 text-2xl font-black sm:text-3xl">Criar novo simulado</h1><p className="text-slate-500 mt-1">Envie seu material em PDF e informe os tópicos que deseja focar.</p></div>
-          <div className="flex gap-2"><span className={`px-3 py-2 rounded-xl text-xs font-bold ${aiAvailable ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>{aiAvailable === null ? 'Verificando IA...' : aiAvailable ? 'OpenRouter disponível' : 'OpenRouter não configurada'}</span><span className="px-3 py-2 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold">{unlimited ? 'Gerações ilimitadas' : `${remaining ?? '—'} gerações neste mês`}</span></div>
+          <div className="flex gap-2"><span className={`px-3 py-2 rounded-xl text-xs font-bold ${aiAvailable ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>{aiAvailable === null ? 'Verificando IA...' : aiAvailable ? 'IA disponível' : 'IA não configurada'}</span><span className="px-3 py-2 rounded-xl bg-blue-50 text-blue-700 text-xs font-bold">{unlimited ? 'Gerações ilimitadas' : `${remaining ?? '—'} gerações neste mês`}</span></div>
         </div>
 
         <div className="mt-7 bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
@@ -156,6 +200,7 @@ export default function NovoSimuladoPage() {
               <input {...getInputProps()} aria-label="Selecionar arquivo PDF" />
               {pdfFile ? <div className="flex items-center gap-4 text-left"><span className="w-14 h-14 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center"><FileText className="w-7 h-7" /></span><div className="flex-1 min-w-0"><p className="font-black truncate">{pdfFile.name}</p><p className="text-sm text-slate-600">{(pdfFile.size / 1024 / 1024).toFixed(2)} MB • PDF pronto para processar</p></div><button type="button" onClick={(event) => { event.stopPropagation(); setPdfFile(null); }} className="p-2 rounded-lg hover:bg-red-50 text-slate-600 hover:text-red-600" aria-label="Remover arquivo"><X className="w-5 h-5" /></button></div> : <div><UploadCloud className="w-12 h-12 text-blue-600 mx-auto" /><p className="font-black text-lg mt-3">Arraste e solte seu PDF aqui</p><p className="text-sm text-slate-600 mt-1">ou clique para selecionar</p><p className="text-xs text-slate-600 mt-4">Apenas PDF • tamanho máximo de 20 MB</p></div>}
             </div>
+            {access.ocr && <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4"><p className="text-sm font-black text-blue-950">Configuração de OCR Pro</p><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-sm font-bold">Idioma principal<select value={ocrLanguage} onChange={(event) => setOcrLanguage(event.target.value as OcrLanguage)} className="mt-2 w-full rounded-xl border border-blue-200 bg-white px-4 py-3"><option value="por">Português</option><option value="eng">Inglês</option><option value="spa">Espanhol</option><option value="fra">Francês</option></select></label><label className="flex items-center gap-3 self-end rounded-xl bg-white p-3 text-sm font-bold"><input type="checkbox" checked={reviewOcrText} onChange={(event) => setReviewOcrText(event.target.checked)} /> Revisar o texto reconhecido página por página</label></div><p className="mt-3 text-xs text-slate-600">Páginas sem texto ou parcialmente digitalizadas são detectadas automaticamente. O limite padrão é de 40 páginas OCR por material.</p></div>}
           </Step>
 
           <Step number={2} title="Tópicos de foco (opcional)" description="Informe os assuntos que você quer que o simulado priorize.">
@@ -166,17 +211,27 @@ export default function NovoSimuladoPage() {
               <label className="text-sm font-bold text-slate-700">Quantidade de questões<select value={questionCount} onChange={(event) => setQuestionCount(Number(event.target.value))} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 font-medium"><option value={10}>10 questões</option><option value={20}>20 questões</option>{access.maxQuestionsPerQuiz >= 30 && <option value={30}>30 questões</option>}{access.maxQuestionsPerQuiz >= 40 && <option value={40}>40 questões</option>}{access.maxQuestionsPerQuiz >= 50 && <option value={50}>50 questões</option>}</select><span className="mt-2 block text-xs font-medium text-slate-500">Plano {access.planCode === 'PRO' ? 'Pro' : 'Grátis'}: até {access.maxQuestionsPerQuiz} questões por simulado.</span></label>
               <label className="text-sm font-bold text-slate-700">Dificuldade<select value={difficulty} onChange={(event) => setDifficulty(event.target.value as typeof difficulty)} className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 font-medium"><option>Fácil</option><option>Médio</option><option>Avançado</option><option>Misto</option></select></label>
             </div>
+            <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50/60 p-5">
+              <div className="flex items-center justify-between gap-3"><div><p className="font-black text-blue-950">Formato da prova {assessmentKind === 'DIAGNOSTIC' && '· diagnóstico'}</p><p className="text-xs text-slate-600">O estilo altera o prompt e as regras de resolução, sem fazer uma chamada adicional à IA.</p></div>{!access.examBoardModes && <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-900">Pro</span>}</div>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <label className="text-sm font-bold">Banca<select value={examBoard} disabled={!access.examBoardModes} onChange={(event) => { const board = event.target.value as typeof examBoard; setExamBoard(board); if (board === 'CEBRASPE') setAnswerFormat('TRUE_FALSE'); }} className="mt-2 w-full rounded-xl border border-blue-200 bg-white px-4 py-3 disabled:opacity-60"><option value="GENERIC">Formato geral</option><option value="CEBRASPE">Cebraspe/Cespe</option><option value="FGV">FGV</option><option value="FCC">FCC</option><option value="VUNESP">Vunesp</option><option value="AOCP">Instituto AOCP</option></select></label>
+                <label className="text-sm font-bold">Tipo de resposta<select value={answerFormat} disabled={!access.examBoardModes} onChange={(event) => setAnswerFormat(event.target.value as typeof answerFormat)} className="mt-2 w-full rounded-xl border border-blue-200 bg-white px-4 py-3 disabled:opacity-60"><option value="FOUR_OPTIONS">4 alternativas</option><option value="FIVE_OPTIONS">5 alternativas</option><option value="TRUE_FALSE">Certo ou errado</option></select></label>
+                <label className="text-sm font-bold">Tempo total em minutos<input type="number" min={0} max={600} value={timeLimitMinutes} disabled={!access.examBoardModes} onChange={(event) => setTimeLimitMinutes(Math.max(0, Math.min(600, Number(event.target.value) || 0)))} className="mt-2 w-full rounded-xl border border-blue-200 bg-white px-4 py-3 disabled:opacity-60" /><span className="mt-1 block text-xs font-medium text-slate-500">Use 0 para deixar sem limite.</span></label>
+                <div className="space-y-2 self-end"><label className="flex items-center gap-3 rounded-xl bg-white p-3 text-sm font-bold"><input type="checkbox" checked={examMode} disabled={!access.examBoardModes} onChange={(event) => setExamMode(event.target.checked)} /> Modo prova: corrigir somente ao final</label><label className="flex items-center gap-3 rounded-xl bg-white p-3 text-sm font-bold"><input type="checkbox" checked={pauseAllowed} disabled={!access.examBoardModes} onChange={(event) => setPauseAllowed(event.target.checked)} /> Permitir pausa</label></div>
+              </div>
+            </div>
           </Step>
 
           <Step number={3} title="Confirmar e gerar" description="Seu simulado será criado com estas características.">
-            <div className="grid sm:grid-cols-2 gap-3 bg-slate-50 rounded-2xl p-5">{[`${questionCount} questões`,'Somente múltipla escolha','4 alternativas por questão',`Dificuldade: ${difficulty}`,selectedMaterialIds.length ? `${selectedMaterialIds.length} material(is) da biblioteca` : 'Novo PDF salvo na biblioteca','Distribuição equilibrada entre materiais'].map((item) => <div key={item} className="flex items-center gap-2 text-sm font-semibold"><span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center"><Check className="w-3.5 h-3.5" /></span>{item}</div>)}</div>
+            <div className="grid sm:grid-cols-2 gap-3 bg-slate-50 rounded-2xl p-5">{[`${questionCount} questões`,answerFormat === 'TRUE_FALSE' ? 'Certo ou errado' : `${answerFormat === 'FIVE_OPTIONS' ? 5 : 4} alternativas por questão`,examBoard === 'GENERIC' ? 'Formato geral' : `Estilo ${examBoard}`,examMode ? 'Correção somente ao final' : 'Correção imediata',timeLimitMinutes ? `${timeLimitMinutes} minutos de prova` : 'Sem limite de tempo',`Dificuldade: ${difficulty}`,selectedMaterialIds.length ? `${selectedMaterialIds.length} material(is) da biblioteca` : 'Novo PDF salvo na biblioteca'].map((item) => <div key={item} className="flex items-center gap-2 text-sm font-semibold"><span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center"><Check className="w-3.5 h-3.5" /></span>{item}</div>)}</div>
           </Step>
 
           <div className="p-6 bg-slate-50 border-t border-slate-200">
-            {isGenerating ? <div className="rounded-2xl avanco-navy text-white p-6"><div className="flex items-center gap-4"><span className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center"><BrainCircuit className="w-6 h-6 text-[#ffc400] animate-pulse" /></span><div className="flex-1"><p className="font-black">{pdfProgress?.message || generationProgress?.message || 'Iniciando processamento...'}</p><div className="h-2 bg-white/10 rounded-full mt-3 overflow-hidden"><div className="h-full bg-[#ffc400] transition-all duration-500" style={{ width: `${pdfProgress?.totalPages ? (pdfProgress.currentPage / pdfProgress.totalPages) * 100 : generationProgress ? (generationProgress.completed / generationProgress.total) * 100 : 0}%` }} /></div>{pdfProgress?.totalPages ? <p className="mt-2 text-xs text-blue-100">{pdfProgress.currentPage} de {pdfProgress.totalPages} páginas • lote {pdfProgress.currentBatch} de {pdfProgress.totalBatches}</p> : generationProgress ? <p className="mt-2 text-xs text-blue-100">{generationProgress.completed} de {generationProgress.total} questões concluídas{generationProgress.attempt > 1 ? ` • tentativa ${generationProgress.attempt}` : ''}{generationProgress.failed > 0 ? ` • ${generationProgress.failed} aguardando nova tentativa` : ''}</p> : null}</div><Loader2 className="w-6 h-6 animate-spin" /></div><p className="text-xs text-blue-100 mt-4">Progresso informado diretamente pelo servidor. Não feche esta página durante o processamento.</p></div> : <><button onClick={generateQuiz} disabled={(!pdfFile && !selectedMaterialIds.length) || remaining === 0 || aiAvailable !== true} className="w-full bg-[#ffc400] text-[#06183d] rounded-xl py-4 font-black text-lg flex items-center justify-center gap-3 hover:bg-yellow-300 disabled:opacity-60 disabled:cursor-not-allowed"><Sparkles className="w-5 h-5" /> Gerar Simulado</button>{aiAvailable === false && <p className="text-sm text-amber-900 text-center mt-3">Configure a chave da OpenRouter para habilitar a geração.</p>}{batchProcessingAvailable && <p className="text-xs text-emerald-800 text-center mt-3">PDFs processados ficam na biblioteca e podem ser reutilizados sem novo envio.</p>}</>}
+            {isGenerating ? <div className="rounded-2xl avanco-navy text-white p-6"><div className="flex items-center gap-4"><span className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center"><BrainCircuit className="w-6 h-6 text-[#ffc400] animate-pulse" /></span><div className="flex-1"><p className="font-black">{pdfProgress?.message || generationProgress?.message || 'Iniciando processamento...'}</p><div className="h-2 bg-white/10 rounded-full mt-3 overflow-hidden"><div className="h-full bg-[#ffc400] transition-all duration-500" style={{ width: `${pdfProgress?.totalPages ? (pdfProgress.currentPage / pdfProgress.totalPages) * 100 : generationProgress ? (generationProgress.completed / generationProgress.total) * 100 : 0}%` }} /></div>{pdfProgress?.totalPages ? <p className="mt-2 text-xs text-blue-100">{pdfProgress.currentPage} de {pdfProgress.totalPages} páginas • lote {pdfProgress.currentBatch} de {pdfProgress.totalBatches}{pdfProgress.ocrConfidence !== undefined ? ` • confiança OCR ${pdfProgress.ocrConfidence}%` : ''}</p> : generationProgress ? <p className="mt-2 text-xs text-blue-100">{generationProgress.completed} de {generationProgress.total} questões concluídas{generationProgress.attempt > 1 ? ` • tentativa ${generationProgress.attempt}` : ''}{generationProgress.failed > 0 ? ` • ${generationProgress.failed} aguardando nova tentativa` : ''}</p> : null}</div><Loader2 className="w-6 h-6 animate-spin" /></div><p className="text-xs text-blue-100 mt-4">O progresso fica salvo por lote. Se a página for fechada, o mesmo PDF poderá continuar de onde parou.</p></div> : <><button onClick={generateQuiz} disabled={(!pdfFile && !selectedMaterialIds.length) || remaining === 0 || aiAvailable !== true} className="w-full bg-[#ffc400] text-[#06183d] rounded-xl py-4 font-black text-lg flex items-center justify-center gap-3 hover:bg-yellow-300 disabled:opacity-60 disabled:cursor-not-allowed"><Sparkles className="w-5 h-5" /> Gerar Simulado</button>{aiAvailable === false && <p className="text-sm text-amber-900 text-center mt-3">Configure a chave da OpenRouter para habilitar a geração.</p>}{batchProcessingAvailable && <p className="text-xs text-emerald-800 text-center mt-3">PDFs processados ficam na biblioteca e podem ser reutilizados sem novo envio.</p>}</>}
           </div>
         </div>
       </div>
+      {ocrReview && <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 p-4"><div className="mx-auto my-8 max-w-3xl rounded-3xl bg-white p-6 shadow-2xl"><p className="text-xs font-black uppercase tracking-wider text-blue-700">Revisão do OCR · página {ocrReview.pageNumber}</p><h2 className="mt-2 text-2xl font-black">Confira o texto reconhecido</h2><p className={`mt-2 text-sm font-bold ${ocrReview.confidence >= 80 ? 'text-emerald-700' : ocrReview.confidence >= 60 ? 'text-amber-700' : 'text-rose-700'}`}>Confiança: {ocrReview.confidence}% · página {ocrReview.reason === 'partial' ? 'parcialmente digitalizada' : 'digitalizada'}</p><textarea value={ocrReviewText} onChange={(event) => setOcrReviewText(event.target.value)} rows={18} className="mt-5 w-full rounded-xl border border-slate-300 p-4 font-mono text-sm" /><div className="mt-4 flex justify-end gap-3"><button onClick={() => { ocrReview.resolve({ text: ocrReview.text, reviewed: false }); setOcrReview(null) }} className="rounded-xl border px-5 py-3 font-bold">Manter original</button><button onClick={() => { ocrReview.resolve({ text: ocrReviewText, reviewed: true }); setOcrReview(null) }} className="rounded-xl bg-blue-700 px-5 py-3 font-black text-white">Usar texto revisado</button></div></div></div>}
     </DashboardShell>
   );
 }

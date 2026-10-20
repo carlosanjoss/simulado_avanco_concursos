@@ -56,6 +56,7 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+    transition: background-color .2s ease, color .2s ease;
   }
 }
 
@@ -109,4 +110,39 @@
   .dashboard-scrollbar::-webkit-scrollbar-track { background: transparent; }
   .dashboard-scrollbar::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, .45); border-radius: 999px; }
   .dashboard-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(71, 85, 105, .7); }
+
+  /* Compatibilidade de tema para as telas existentes. Mantém os destaques da
+     marca e converte superfícies neutras sem exigir duplicação em cada página. */
+  .dark body { background: #071120; color: #e7eef9; }
+  .dark .bg-white { background-color: #0d192b; }
+  .dark [class*="bg-slate-50"],
+  .dark [class*="bg-slate-100"] { background-color: #111f33; }
+  .dark [class*="bg-[#f"] { background-color: #071120; }
+  .dark [class*="text-[#06183d]"] { color: #eef5ff; }
+  .dark .text-slate-900,
+  .dark .text-slate-800,
+  .dark .text-slate-700 { color: #dce7f7; }
+  .dark .text-slate-600 { color: #b9c6d8; }
+  .dark .text-slate-500,
+  .dark .text-slate-400 { color: #8fa0b7; }
+  .dark .border-slate-100,
+  .dark .border-slate-200,
+  .dark .border-slate-300 { border-color: #26364c; }
+  .dark [class*="bg-blue-50"] { background-color: rgba(30, 64, 175, .18); }
+  .dark [class*="bg-emerald-50"] { background-color: rgba(5, 150, 105, .15); }
+  .dark [class*="bg-amber-50"] { background-color: rgba(217, 119, 6, .15); }
+  .dark [class*="bg-rose-50"],
+  .dark [class*="bg-red-50"] { background-color: rgba(225, 29, 72, .13); }
+  .dark input,
+  .dark select,
+  .dark textarea { background-color: #0b1728; color: #e7eef9; border-color: #33445c; }
+  .dark input::placeholder,
+  .dark textarea::placeholder { color: #718198; }
+  .dark option { background-color: #0b1728; color: #e7eef9; }
+  .dark .shadow-sm,
+  .dark .shadow-md,
+  .dark .shadow-lg,
+  .dark .shadow-xl,
+  .dark .shadow-2xl { --tw-shadow-color: rgba(0, 0, 0, .35); }
+  .dark .dashboard-scrollbar { scrollbar-color: rgba(100, 116, 139, .75) transparent; }
 }

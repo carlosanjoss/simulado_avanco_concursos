@@ -40,6 +40,9 @@ export interface VectorDocument {
   status: 'pending' | 'processing' | 'ready' | 'failed';
   expires_at: string | null;
   ocr_pages: number;
+  ocr_language: string | null;
+  ocr_confidence: number | null;
+  ocr_page_limit: number;
   archived_at: string | null;
   last_used_at: string | null;
 }
@@ -50,6 +53,8 @@ export interface MaterialSummary {
   fileSize: number;
   totalPages: number;
   ocrPages: number;
+  ocrLanguage: string | null;
+  ocrConfidence: number | null;
   status: VectorDocument['status'];
   archivedAt: string | null;
   lastUsedAt: string | null;
@@ -130,6 +135,7 @@ export async function createVectorDocument(input: {
   fileSize: number;
   totalPages: number;
   totalBatches: number;
+  ocrPageLimit?: number;
 }): Promise<VectorDocument> {
   const supabase = await getSupabaseAdmin();
   const { data: existing, error: existingError } = await supabase
@@ -157,6 +163,7 @@ export async function createVectorDocument(input: {
       file_size: input.fileSize,
       total_pages: input.totalPages,
       total_batches: input.totalBatches,
+      ocr_page_limit: input.ocrPageLimit || 40,
       expires_at: expiresAt,
     })
     .select('*')
@@ -183,6 +190,13 @@ export async function getVectorDocumentChunkCount(documentId: string): Promise<n
     .eq('document_id', documentId);
   assertSupabaseResult(error, 'VECTOR_CHUNK_COUNT_FAILED');
   return count ?? 0;
+}
+
+export async function getOcrDocumentSummary(documentId: string): Promise<{ pages: number; confidence: number | null; pageNumbers: number[] }> {
+  const { data, error } = await (await getSupabaseAdmin()).from('simulado_ocr_pages').select('page_number,confidence').eq('document_id', documentId)
+  assertSupabaseResult(error, 'VECTOR_OCR_SUMMARY_FAILED')
+  const values = (data || []).map((item) => Number(item.confidence)).filter(Number.isFinite)
+  return { pages: values.length, confidence: values.length ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : null, pageNumbers: (data || []).map((item) => Number(item.page_number)) }
 }
 
 export async function processVectorBatch(input: {
@@ -250,7 +264,16 @@ export async function processVectorBatch(input: {
   return { chunks: rows.length, alreadyProcessed: false };
 }
 
-export async function finalizeVectorDocument(document: VectorDocument, ocrPages = 0): Promise<{ chunkCount: number }> {
+export async function storeOcrPageMetadata(input: { documentId: string; userId: string; pages: Array<{ pageNumber: number; text: string; confidence: number; language: string; reason: 'empty' | 'partial'; reviewed: boolean }> }): Promise<void> {
+  if (!input.pages.length) return
+  const document = await getVectorDocument(input.documentId, input.userId)
+  if (!document) throw new Error('VECTOR_DOCUMENT_NOT_FOUND')
+  const rows = input.pages.map((page) => ({ document_id: input.documentId, page_number: page.pageNumber, language: page.language, confidence: page.confidence, detection_reason: page.reason, recognized_text: page.text, reviewed: page.reviewed, updated_at: new Date().toISOString() }))
+  const { error } = await (await getSupabaseAdmin()).from('simulado_ocr_pages').upsert(rows, { onConflict: 'document_id,page_number' })
+  assertSupabaseResult(error, 'VECTOR_OCR_METADATA_FAILED')
+}
+
+export async function finalizeVectorDocument(document: VectorDocument, ocrPages = 0, ocrLanguage?: string, ocrConfidence?: number | null): Promise<{ chunkCount: number }> {
   const supabase = await getSupabaseAdmin();
   const { count: batchCount, error: batchError } = await supabase
     .from('simulado_batches')
@@ -269,7 +292,7 @@ export async function finalizeVectorDocument(document: VectorDocument, ocrPages 
 
   const { error: updateError } = await supabase
     .from('simulado_documents')
-    .update({ status: 'ready', processed_batches: batchCount, ocr_pages: ocrPages, expires_at: null, updated_at: new Date().toISOString() })
+    .update({ status: 'ready', processed_batches: batchCount, ocr_pages: ocrPages, ocr_language: ocrPages ? ocrLanguage || 'por' : null, ocr_confidence: ocrPages ? ocrConfidence ?? null : null, expires_at: null, updated_at: new Date().toISOString() })
     .eq('id', document.id)
     .eq('user_id', document.user_id);
   assertSupabaseResult(updateError, 'VECTOR_DOCUMENT_FINALIZE_FAILED');
@@ -279,7 +302,7 @@ export async function finalizeVectorDocument(document: VectorDocument, ocrPages 
 export async function listVectorMaterials(userId: string, includeArchived = false): Promise<MaterialSummary[]> {
   let query = (await getSupabaseAdmin())
     .from('simulado_documents')
-    .select('id,file_name,file_size,total_pages,ocr_pages,status,archived_at,last_used_at,created_at,updated_at')
+    .select('id,file_name,file_size,total_pages,ocr_pages,ocr_language,ocr_confidence,status,archived_at,last_used_at,created_at,updated_at')
     .eq('user_id', userId)
     .eq('status', 'ready')
     .order('updated_at', { ascending: false });
@@ -292,6 +315,8 @@ export async function listVectorMaterials(userId: string, includeArchived = fals
     fileSize: item.file_size,
     totalPages: item.total_pages,
     ocrPages: item.ocr_pages || 0,
+    ocrLanguage: item.ocr_language || null,
+    ocrConfidence: item.ocr_confidence ?? null,
     status: item.status,
     archivedAt: item.archived_at,
     lastUsedAt: item.last_used_at,

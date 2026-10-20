@@ -1,5 +1,5 @@
 import 'server-only'
-import { timingSafeEqual } from 'node:crypto'
+import { createHmac, timingSafeEqual } from 'node:crypto'
 import { addMonths, addYears } from 'date-fns'
 import type { BillingInterval } from '@/lib/plans'
 
@@ -14,6 +14,7 @@ export interface NuvemshopPlanMatch {
 export interface NuvemshopOrderSummary {
   id: string
   email: string | null
+  orderStatus: string | null
   paymentStatus: string | null
   customerId: string | null
   subscriptionId: string | null
@@ -44,14 +45,53 @@ export function verifyNuvemshopWebhook(request: Request, storeId: string | numbe
   return safeSecretEqual(request.headers.get('x-avanco-webhook-secret'), process.env.NUVEMSHOP_WEBHOOK_SECRET)
 }
 
+export function verifyNuvemshopWebhookSignature(rawBody: string, hmacHeader: string | null): boolean {
+  const appSecret = process.env.NUVEMSHOP_APP_SECRET
+  if (!appSecret || !hmacHeader) return false
+  const receivedHex = hmacHeader.trim().replace(/^sha256=/i, '').toLowerCase()
+  if (!/^[a-f0-9]{64}$/.test(receivedHex)) return false
+  const expected = createHmac('sha256', appSecret).update(rawBody, 'utf8').digest()
+  const received = Buffer.from(receivedHex, 'hex')
+  return received.length === expected.length && timingSafeEqual(received, expected)
+}
+
+export function verifySecureNuvemshopWebhook(request: Request, storeId: string | number, rawBody: string): boolean {
+  const expectedStoreId = process.env.NUVEMSHOP_STORE_ID
+  if (!expectedStoreId || String(storeId) !== expectedStoreId) return false
+  if (process.env.NUVEMSHOP_APP_SECRET) {
+    return verifyNuvemshopWebhookSignature(rawBody, request.headers.get('x-linkedstore-hmac-sha256'))
+  }
+  // O cabeçalho personalizado existe apenas para desenvolvimento/migração.
+  // Produção exige o HMAC oficial calculado com o segredo da aplicação.
+  if (process.env.NODE_ENV === 'production') return false
+  return verifyNuvemshopWebhook(request, storeId)
+}
+
 export function isNuvemshopConfigured(): boolean {
-  return Boolean(process.env.NUVEMSHOP_STORE_ID && process.env.NUVEMSHOP_ACCESS_TOKEN && process.env.NUVEMSHOP_APP_ID)
+  return Boolean(
+    process.env.NUVEMSHOP_STORE_ID
+    && process.env.NUVEMSHOP_ACCESS_TOKEN
+    && (process.env.NODE_ENV !== 'production' || process.env.NUVEMSHOP_APP_SECRET)
+    && process.env.NUVEMSHOP_WEBHOOK_SECRET
+    && (
+      process.env.NUVEMSHOP_PRO_MONTHLY_PRODUCT_ID
+      || process.env.NUVEMSHOP_PRO_MONTHLY_VARIANT_ID
+      || process.env.NUVEMSHOP_PRO_ANNUAL_PRODUCT_ID
+      || process.env.NUVEMSHOP_PRO_ANNUAL_VARIANT_ID
+    ),
+  )
 }
 
 function getPlanFromProducts(products: unknown): NuvemshopPlanMatch | null {
   if (!Array.isArray(products)) return null
-  const monthlyId = process.env.NUVEMSHOP_PRO_MONTHLY_PRODUCT_ID
-  const annualId = process.env.NUVEMSHOP_PRO_ANNUAL_PRODUCT_ID
+  const monthlyIds = new Set([
+    process.env.NUVEMSHOP_PRO_MONTHLY_PRODUCT_ID,
+    process.env.NUVEMSHOP_PRO_MONTHLY_VARIANT_ID,
+  ].filter((id): id is string => Boolean(id)))
+  const annualIds = new Set([
+    process.env.NUVEMSHOP_PRO_ANNUAL_PRODUCT_ID,
+    process.env.NUVEMSHOP_PRO_ANNUAL_VARIANT_ID,
+  ].filter((id): id is string => Boolean(id)))
 
   for (const item of products) {
     const product = asRecord(item)
@@ -59,11 +99,11 @@ function getPlanFromProducts(products: unknown): NuvemshopPlanMatch | null {
     const productId = asString(product.product_id ?? product.id)
     const variantId = asString(product.variant_id)
     const sku = asString(product.sku)?.toUpperCase()
-    const ids = [productId, variantId].filter(Boolean)
-    if ((monthlyId && ids.includes(monthlyId)) || sku === 'AVANCO_PRO_MONTHLY') {
+    const ids = [productId, variantId].filter((id): id is string => Boolean(id))
+    if (ids.some((id) => monthlyIds.has(id)) || sku === 'AVANCO_PRO_MONTHLY') {
       return { planCode: 'PRO', billingInterval: 'MONTHLY', productId: productId || variantId || sku! }
     }
-    if ((annualId && ids.includes(annualId)) || sku === 'AVANCO_PRO_ANNUAL') {
+    if (ids.some((id) => annualIds.has(id)) || sku === 'AVANCO_PRO_ANNUAL') {
       return { planCode: 'PRO', billingInterval: 'ANNUAL', productId: productId || variantId || sku! }
     }
   }
@@ -79,6 +119,7 @@ export function normalizeNuvemshopOrder(raw: unknown): NuvemshopOrderSummary {
   return {
     id: asString(order.id) || '',
     email,
+    orderStatus: asString(order.status),
     paymentStatus: asString(order.payment_status ?? order.status),
     customerId: asString(customer?.id),
     subscriptionId: asString(order.subscription_id ?? subscription?.id),
@@ -87,16 +128,27 @@ export function normalizeNuvemshopOrder(raw: unknown): NuvemshopOrderSummary {
   }
 }
 
+export function getNuvemshopOrderDisposition(order: Pick<NuvemshopOrderSummary, 'orderStatus' | 'paymentStatus'>): 'ACTIVE' | 'CANCELED' | 'REVOKED' | 'PENDING' {
+  const orderStatus = order.orderStatus?.toLowerCase()
+  const paymentStatus = order.paymentStatus?.toLowerCase()
+  if (paymentStatus === 'refunded' || paymentStatus === 'voided') return 'REVOKED'
+  if (orderStatus === 'cancelled') return 'CANCELED'
+  if (paymentStatus === 'paid') return 'ACTIVE'
+  return 'PENDING'
+}
+
 export async function fetchNuvemshopOrder(orderId: string | number): Promise<NuvemshopOrderSummary> {
   const storeId = process.env.NUVEMSHOP_STORE_ID
   const token = process.env.NUVEMSHOP_ACCESS_TOKEN
-  const appId = process.env.NUVEMSHOP_APP_ID
-  if (!storeId || !token || !appId) throw new Error('NUVEMSHOP_NOT_CONFIGURED')
+  if (!storeId || !token) throw new Error('NUVEMSHOP_NOT_CONFIGURED')
+  const apiBaseUrl = (process.env.NUVEMSHOP_API_BASE_URL || 'https://api.nuvemshop.com.br/v1').replace(/\/$/, '')
+  const identity = process.env.NUVEMSHOP_APP_ID || process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'integracao-propria'
+  const userAgent = process.env.NUVEMSHOP_USER_AGENT || `Avanco Simulados (${identity})`
 
-  const response = await fetch(`https://api.nuvemshop.com/v1/${storeId}/orders/${orderId}`, {
+  const response = await fetch(`${apiBaseUrl}/${storeId}/orders/${orderId}`, {
     headers: {
       Authorization: `Bearer ${token}`,
-      'User-Agent': `Avanco Simulados (${appId})`,
+      'User-Agent': userAgent,
       Accept: 'application/json',
     },
     cache: 'no-store',

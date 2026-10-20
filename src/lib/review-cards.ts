@@ -1,7 +1,7 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { evaluateAnswer } from '@/lib/quiz-evaluation'
-import { nextReviewSchedule } from '@/lib/spaced-repetition'
+import { nextReviewSchedule, type ReviewErrorType } from '@/lib/spaced-repetition'
 import type { Question } from '@/types/quiz'
 
 export async function syncReviewCardsFromAttempt(input: { userId: string; simuladoId: string; questions: Question[]; answers: Record<string, string> }) {
@@ -21,7 +21,7 @@ export async function syncReviewCardsFromAttempt(input: { userId: string; simula
     const evaluation = evaluateAnswer(question, answer)
     const linkedCard = question.reviewCardId ? linkedById.get(question.reviewCardId) : undefined
     if (linkedCard) {
-      const schedule = nextReviewSchedule(linkedCard, evaluation.correct ? 4 : 1, now)
+      const schedule = nextReviewSchedule(linkedCard, evaluation.correct ? 4 : 1, now, linkedCard.errorType as ReviewErrorType)
       return [prisma.reviewCard.update({
         where: { id: linkedCard.id },
         data: { ...schedule, lastAnswer: answer, lastReviewedAt: now },
@@ -32,11 +32,11 @@ export async function syncReviewCardsFromAttempt(input: { userId: string; simula
       return [prisma.reviewCard.upsert({
         where: { userId_simuladoId_questionId: { userId: input.userId, simuladoId: input.simuladoId, questionId: question.id } },
         create: { userId: input.userId, simuladoId: input.simuladoId, questionId: question.id, questionJson: JSON.stringify(question), lastAnswer: answer, dueAt: now },
-        update: { questionJson: JSON.stringify(question), lastAnswer: answer, repetitions: 0, intervalDays: 1, dueAt: now, masteredAt: null },
+        update: { questionJson: JSON.stringify(question), lastAnswer: answer, repetitions: 0, intervalDays: 1, lapses: { increment: 1 }, dueAt: now, masteredAt: null },
       })]
     }
     if (!card) return []
-    const schedule = nextReviewSchedule(card, 4, now)
+    const schedule = nextReviewSchedule(card, 4, now, card.errorType as ReviewErrorType)
     return [prisma.reviewCard.update({
       where: { id: card.id },
       data: { ...schedule, lastAnswer: answer, lastReviewedAt: now },

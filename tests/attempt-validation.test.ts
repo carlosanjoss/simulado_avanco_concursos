@@ -11,6 +11,7 @@ describe('attempt API validation', () => {
   it('accepts a valid final submission and rejects extra fields', () => {
     expect(attemptSubmissionSchema.safeParse({ simuladoId: 'quiz', respostas: { 1: 'A' }, selectedAnswers: { 1: 'A' }, elapsedSeconds: 120, totalQuestoes: 30, isFinal: true }).success).toBe(true);
     expect(attemptSubmissionSchema.safeParse({ simuladoId: 'quiz', respostas: {}, selectedAnswers: {}, totalQuestoes: 50, isFinal: false }).success).toBe(true);
+    expect(attemptSubmissionSchema.safeParse({ simuladoId: 'quiz', respostas: {}, selectedAnswers: {}, markedQuestions: [1, 7, 50], totalQuestoes: 50, isFinal: false }).success).toBe(true);
     expect(attemptSubmissionSchema.safeParse({ simuladoId: 'quiz', respostas: {}, selectedAnswers: {}, totalQuestoes: 51, isFinal: false }).success).toBe(false);
     expect(attemptSubmissionSchema.safeParse({ simuladoId: 'quiz', respostas: {}, selectedAnswers: {}, isFinal: false, injected: true }).success).toBe(false);
   });

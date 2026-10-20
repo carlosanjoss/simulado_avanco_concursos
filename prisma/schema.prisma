@@ -9,29 +9,33 @@ datasource db {
 }
 
 model User {
-  id           String             @id @default(cuid())
-  email        String             @unique
-  name         String?
-  imageUrl     String?
-  password     String?
-  isAdmin      Boolean            @default(false)
-  accountStatus String             @default("ACTIVE")
-  tokenVersion  Int                @default(0)
-  lastLoginAt   DateTime?
-  emailVerifiedAt DateTime?
-  termsAcceptedAt DateTime?
-  legalVersion    String?
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-  simulados    Simulado[]
-  monthlyUsage MonthlyUsage[]
-  tentativas   Tentativa[]
-  feedbacks    QuestionFeedback[]
-  authTokens   AuthToken[]
-  subscription Subscription?
-  paymentEvents PaymentEvent[]
-  studyPlanProgress StudyPlanProgress[]
-  reviewCards ReviewCard[]
+  id                  String              @id @default(cuid())
+  email               String              @unique
+  name                String?
+  imageUrl            String?
+  password            String?
+  isAdmin             Boolean             @default(false)
+  accountStatus       String              @default("ACTIVE")
+  tokenVersion        Int                 @default(0)
+  lastLoginAt         DateTime?
+  emailVerifiedAt     DateTime?
+  termsAcceptedAt     DateTime?
+  legalVersion        String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  simulados           Simulado[]
+  monthlyUsage        MonthlyUsage[]
+  tentativas          Tentativa[]
+  feedbacks           QuestionFeedback[]
+  authTokens          AuthToken[]
+  subscription        Subscription?
+  paymentEvents       PaymentEvent[]
+  studyPlanProgress   StudyPlanProgress[]
+  studyPlanSettings   StudyPlanSettings?
+  reviewCards         ReviewCard[]
+  questionBankEntries QuestionBankEntry[]
+  questionVersions    QuestionVersion[]   @relation("QuestionVersionAuthor")
+  examNotices         ExamNotice[]
 }
 
 model AuthToken {
@@ -56,6 +60,7 @@ model Subscription {
   planCode               String    @default("FREE")
   status                 String    @default("PENDING")
   billingInterval        String?
+  providerOrderId        String?   @unique
   providerSubscriptionId String?   @unique
   providerCustomerId     String?
   currentPeriodStart     DateTime?
@@ -105,32 +110,100 @@ model MonthlyUsage {
 }
 
 model Simulado {
-  id            String             @id @default(cuid())
-  userId        String
-  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  titulo        String
-  totalQuestoes Int                @default(30)
-  temasFoco     String?
-  pdfNome       String
-  pdfHash       String
-  questoesJson  String
-  sourceDocumentId String?
-  difficultyTarget String         @default("MISTO")
-  ocrUsed       Boolean            @default(false)
-  status        String             @default("NAO_INICIADO")
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
-  tentativas    Tentativa[]
-  feedbacks     QuestionFeedback[]
-  reviewCards   ReviewCard[]
-  materials     SimuladoMaterial[]
-  deletedAt     DateTime?
+  id                  String              @id @default(cuid())
+  userId              String
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  titulo              String
+  totalQuestoes       Int                 @default(30)
+  temasFoco           String?
+  pdfNome             String
+  pdfHash             String
+  questoesJson        String
+  sourceDocumentId    String?
+  difficultyTarget    String              @default("MISTO")
+  ocrUsed             Boolean             @default(false)
+  assessmentKind      String              @default("PRACTICE")
+  examBoard           String              @default("GENERIC")
+  examMode            Boolean             @default(false)
+  scoringMode         String              @default("STANDARD")
+  timeLimitMinutes    Int?
+  pauseAllowed        Boolean             @default(true)
+  feedbackMode        String              @default("IMMEDIATE")
+  examNoticeId        String?
+  examNotice          ExamNotice?         @relation(fields: [examNoticeId], references: [id], onDelete: SetNull)
+  status              String              @default("NAO_INICIADO")
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  tentativas          Tentativa[]
+  feedbacks           QuestionFeedback[]
+  reviewCards         ReviewCard[]
+  questionBankEntries QuestionBankEntry[]
+  materials           SimuladoMaterial[]
+  deletedAt           DateTime?
 
   @@index([userId, pdfHash])
   @@index([userId])
   @@index([createdAt])
   @@index([pdfHash])
   @@index([sourceDocumentId])
+  @@index([examNoticeId])
+}
+
+model ExamNotice {
+  id             String     @id @default(cuid())
+  userId         String
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title          String
+  examDate       DateTime?
+  sourceFileName String?
+  syllabusJson   String
+  active         Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  simulados      Simulado[]
+
+  @@index([userId, active])
+  @@index([userId, updatedAt])
+}
+
+model QuestionBankEntry {
+  id               String            @id @default(cuid())
+  userId           String
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  simuladoId       String
+  simulado         Simulado          @relation(fields: [simuladoId], references: [id], onDelete: Cascade)
+  questionId       Int
+  favorite         Boolean           @default(false)
+  tags             String            @default("[]")
+  notes            String?
+  excludedAt       DateTime?
+  editorialStatus  String            @default("PRIVATE")
+  sourceType       String            @default("USER_GENERATED")
+  sourceName       String?
+  licenseReference String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  versions         QuestionVersion[]
+
+  @@unique([userId, simuladoId, questionId])
+  @@index([userId, favorite])
+  @@index([editorialStatus, updatedAt])
+  @@index([simuladoId])
+}
+
+model QuestionVersion {
+  id           String            @id @default(cuid())
+  entryId      String
+  entry        QuestionBankEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  version      Int
+  snapshotJson String
+  changeType   String
+  changedById  String
+  changedBy    User              @relation("QuestionVersionAuthor", fields: [changedById], references: [id], onDelete: Cascade)
+  createdAt    DateTime          @default(now())
+
+  @@unique([entryId, version])
+  @@index([entryId, createdAt])
 }
 
 model SimuladoMaterial {
@@ -147,18 +220,36 @@ model SimuladoMaterial {
 }
 
 model StudyPlanProgress {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  weekKey     String
-  taskKey     String
-  completed   Boolean  @default(false)
-  completedAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weekKey         String
+  taskKey         String
+  completed       Boolean   @default(false)
+  completedAt     DateTime?
+  scheduledDate   DateTime?
+  theme           String?
+  mode            String?
+  durationMinutes Int?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@unique([userId, weekKey, taskKey])
   @@index([userId, weekKey])
+}
+
+model StudyPlanSettings {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  examName             String?
+  examDate             DateTime?
+  availableDays        String    @default("[1,2,3,4,5]")
+  minutesPerDay        Int       @default(45)
+  weeklyGoal           Int       @default(5)
+  notificationsEnabled Boolean   @default(true)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 }
 
 model ReviewCard {
@@ -170,6 +261,11 @@ model ReviewCard {
   questionId     Int
   questionJson   String
   lastAnswer     String?
+  notes          String?
+  favorite       Boolean   @default(false)
+  errorType      String    @default("CONTENT")
+  manual         Boolean   @default(false)
+  lapses         Int       @default(0)
   repetitions    Int       @default(0)
   intervalDays   Int       @default(1)
   easeFactor     Float     @default(2.5)
@@ -182,6 +278,8 @@ model ReviewCard {
   @@unique([userId, simuladoId, questionId])
   @@index([userId, dueAt])
   @@index([userId, masteredAt])
+  @@index([userId, favorite])
+  @@index([userId, errorType])
 }
 
 model Tentativa {
@@ -199,6 +297,7 @@ model Tentativa {
   selectedAnswers String?
   concluidoEm     DateTime?
   durationSeconds Int?
+  markedQuestions String?   @default("[]")
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 

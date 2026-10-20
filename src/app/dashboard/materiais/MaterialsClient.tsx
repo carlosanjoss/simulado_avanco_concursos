@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Archive, ArchiveRestore, ChevronLeft, ChevronRight, FileScan, FileText, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
-interface Material { id: string; fileName: string; fileSize: number; totalPages: number; ocrPages: number; archivedAt: string | null; lastUsedAt: string | null; createdAt: string }
+interface Material { id: string; fileName: string; fileSize: number; totalPages: number; ocrPages: number; ocrLanguage: string | null; ocrConfidence: number | null; archivedAt: string | null; lastUsedAt: string | null; createdAt: string }
 
 export default function MaterialsClient() {
   const [materials, setMaterials] = useState<Material[]>([]); const [loading, setLoading] = useState(true); const [showArchived, setShowArchived] = useState(false); const [search, setSearch] = useState('')

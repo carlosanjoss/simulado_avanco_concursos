@@ -1,90 +1,67 @@
-'use client';
+'use client'
 
-import { useMemo, useState } from 'react';
-import Link from 'next/link';
-import { BookOpenCheck, Check, ChevronRight, Clock3, Flame, RefreshCw, Sparkles, Target, Trophy } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { Bell, BookOpenCheck, CalendarDays, Check, Clock3, Flame, History, Play, Save, Settings2, Target } from 'lucide-react'
+import { toast } from 'sonner'
+import type { AdaptiveStudyTask } from '@/lib/study-plan'
 
-const dayNames = ['Hoje', 'Amanhã', 'Dia 3', 'Dia 4', 'Dia 5', 'Dia 6', 'Dia 7'];
-const activityLabels = ['Revisão ativa', 'Prática dirigida', 'Fixação'];
+interface Settings { examName: string; examDate: string; availableDays: number[]; minutesPerDay: number; weeklyGoal: number; notificationsEnabled: boolean }
+interface WeekHistory { weekKey: string; completed: number; total: number }
+const weekDays = [[1, 'Seg'], [2, 'Ter'], [3, 'Qua'], [4, 'Qui'], [5, 'Sex'], [6, 'Sáb'], [0, 'Dom']] as const
 
-interface PlanTask { id: string; day: string; title: string; detail: string; duration: number; mode: string }
+export default function StudyPlanClient({ tasks, weekKey, initialCompleted, settings: initialSettings, history, streak, dueReviews }: {
+  tasks: AdaptiveStudyTask[]; weekKey: string; initialCompleted: string[]; settings: Settings; history: WeekHistory[]; streak: number; dueReviews: number
+}) {
+  const router = useRouter()
+  const [completed, setCompleted] = useState(initialCompleted)
+  const [settings, setSettings] = useState(initialSettings)
+  const [showSettings, setShowSettings] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const percentage = tasks.length ? Math.round(completed.filter((id) => tasks.some((task) => task.id === id)).length / tasks.length * 100) : 0
 
-export default function StudyPlanClient({ themes, weekKey, initialCompleted }: { themes: string[]; weekKey: string; initialCompleted: string[] }) {
-  const planThemes = useMemo(() => themes.length ? themes : ['Fundamentos', 'Revisão geral', 'Prática de questões'], [themes]);
-  const tasks = useMemo<PlanTask[]>(() => dayNames.map((day, index) => {
-    const theme = planThemes[index % planThemes.length];
-    const mode = index % 3;
-    return {
-      id: `${index}-${theme}`,
-      day,
-      title: mode === 0 ? `Revisar ${theme}` : mode === 1 ? `Praticar ${theme}` : `Consolidar ${theme}`,
-      detail: mode === 0 ? 'Leitura ativa e anotações dos conceitos centrais.' : mode === 1 ? 'Resolva questões e registre os pontos de atenção.' : 'Explique o conteúdo sem consultar o material.',
-      duration: mode === 1 ? 30 : 25,
-      mode: activityLabels[mode],
-    };
-  }), [planThemes]);
-  const [completed, setCompleted] = useState<string[]>(initialCompleted);
-  const [syncError, setSyncError] = useState('');
+  useEffect(() => {
+    fetch('/api/study-plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'sync', weekKey, tasks: tasks.map((task) => ({ id: task.id, scheduledDate: task.scheduledDate, theme: task.theme, mode: task.mode, duration: task.duration })) }) }).catch(() => undefined)
+  }, [tasks, weekKey])
 
-  const percentage = Math.round((completed.length / tasks.length) * 100);
-  const remaining = tasks.length - completed.length;
-  const toggle = async (id: string) => {
-    const wasCompleted = completed.includes(id);
-    setCompleted((current) => wasCompleted ? current.filter((item) => item !== id) : [...current, id]);
-    setSyncError('');
-    const response = await fetch('/api/study-plan', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekKey, taskKey: id, completed: !wasCompleted }) });
+  const examCountdown = useMemo(() => settings.examDate ? Math.max(0, Math.ceil((new Date(`${settings.examDate}T12:00:00`).getTime() - Date.now()) / 86_400_000)) : null, [settings.examDate])
+
+  async function toggle(task: AdaptiveStudyTask) {
+    const wasCompleted = completed.includes(task.id)
+    setCompleted((current) => wasCompleted ? current.filter((id) => id !== task.id) : [...current, task.id])
+    const response = await fetch('/api/study-plan', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'progress', weekKey, taskKey: task.id, completed: !wasCompleted }) })
     if (!response.ok) {
-      setCompleted((current) => wasCompleted ? [...new Set([...current, id])] : current.filter((item) => item !== id));
-      setSyncError('Não foi possível sincronizar o progresso. Tente novamente.');
+      setCompleted((current) => wasCompleted ? [...new Set([...current, task.id])] : current.filter((id) => id !== task.id))
+      toast.error('Não foi possível sincronizar o progresso.')
     }
-  };
-  const resetWeek = async () => {
-    const previous = completed;
-    setCompleted([]);
-    const response = await fetch(`/api/study-plan?weekKey=${encodeURIComponent(weekKey)}`, { method: 'DELETE' });
-    if (!response.ok) { setCompleted(previous); setSyncError('Não foi possível reiniciar a semana.'); }
-  };
+  }
 
-  return (
-    <div className="mx-auto max-w-7xl p-4 pb-10 sm:p-6 lg:p-7">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div><p className="text-xs font-black uppercase tracking-[0.18em] text-blue-700">Sua semana de estudos</p><h1 className="mt-2 text-2xl font-black sm:text-3xl">Plano de estudos</h1><p className="mt-2 max-w-2xl text-slate-600">Uma rotina prática criada a partir dos temas dos seus simulados.</p></div>
-        <button type="button" onClick={resetWeek} className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-black shadow-sm transition hover:border-blue-300 hover:text-blue-700 sm:self-auto"><RefreshCw className="h-4 w-4" /> Reiniciar semana</button>
-      </div>
+  async function saveSettings() {
+    setSaving(true)
+    const response = await fetch('/api/study-plan', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'settings', ...settings, examName: settings.examName.trim() || null, examDate: settings.examDate || null }) })
+    setSaving(false)
+    if (!response.ok) return toast.error('Não foi possível salvar as preferências.')
+    toast.success('Plano recalculado com suas preferências.')
+    setShowSettings(false)
+    router.refresh()
+  }
 
-      {syncError && <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{syncError}</p>}
+  return <div className="mx-auto max-w-7xl p-4 pb-10 sm:p-6 lg:p-7">
+    <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[.18em] text-blue-700">Planejamento adaptativo</p><h1 className="mt-2 text-3xl font-black">Plano de estudos</h1><p className="mt-2 text-slate-600">Prioriza seus pontos fracos, revisões vencidas e a proximidade da prova.</p></div><button onClick={() => setShowSettings((value) => !value)} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 font-black"><Settings2 className="h-5 w-5" /> Configurar rotina</button></div>
 
-      <section className="relative mt-7 overflow-hidden rounded-[2rem] bg-gradient-to-br from-[#061b46] via-[#07347d] to-[#075ed1] p-6 text-white shadow-[0_20px_60px_rgba(6,41,104,0.22)] sm:p-8">
-        <div className="absolute -right-16 -top-24 h-72 w-72 rounded-full bg-blue-400/20 blur-2xl" /><div className="absolute -bottom-24 right-1/3 h-56 w-56 rounded-full bg-[#ffc400]/15 blur-2xl" />
-        <div className="relative grid gap-8 lg:grid-cols-[1fr_330px] lg:items-center">
-          <div><span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-sm font-black text-[#ffd84d]"><Flame className="h-4 w-4" /> Consistência cria resultado</span><h2 className="mt-4 text-2xl font-black sm:text-3xl">Seu progresso desta semana</h2><p className="mt-2 max-w-2xl text-sm leading-relaxed text-blue-100 sm:text-base">Avance uma atividade por dia. Se perder um dia, continue de onde parou — o importante é manter o ritmo.</p>
-            <div className="mt-6 flex gap-2" aria-label={`${completed.length} de ${tasks.length} atividades concluídas`}>{tasks.map((task, index) => <span key={task.id} className={`h-2.5 flex-1 rounded-full transition-colors ${completed.includes(task.id) ? 'bg-[#ffc400]' : index === completed.length ? 'bg-white' : 'bg-white/20'}`} />)}</div>
-          </div>
-          <div className="grid grid-cols-[120px_1fr] items-center gap-5 rounded-3xl border border-white/15 bg-white/10 p-5 backdrop-blur-sm">
-            <div className="relative flex h-28 w-28 items-center justify-center rounded-full" style={{ background: `conic-gradient(#ffc400 ${percentage * 3.6}deg, rgba(255,255,255,.16) 0deg)` }}><div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#09275b] text-2xl font-black">{percentage}%</div></div>
-            <div><p className="text-3xl font-black">{completed.length}<span className="text-lg text-blue-200">/{tasks.length}</span></p><p className="mt-1 text-sm text-blue-100">atividades concluídas</p><p className="mt-3 text-xs font-bold text-[#ffd84d]">{remaining === 0 ? 'Semana concluída!' : `${remaining} para concluir`}</p></div>
-          </div>
-        </div>
-      </section>
+    {settings.notificationsEnabled && dueReviews > 0 && <Link href="/dashboard/caderno-erros" className="mt-5 flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950"><Bell className="h-5 w-5" /><span><strong>{dueReviews} revisão(ões) aguardando hoje.</strong> Abra o caderno para manter sua sequência.</span></Link>}
 
-      <div className="mt-7 grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <section className="min-w-0 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex min-w-0 items-center justify-between gap-4 border-b border-slate-100 px-5 py-4 sm:px-6"><div className="min-w-0"><h2 className="text-xl font-black">Roteiro de 7 dias</h2><p className="mt-1 text-sm text-slate-500">Clique em uma atividade para marcá-la como concluída.</p></div><BookOpenCheck className="h-6 w-6 shrink-0 text-blue-700" /></div>
-          <div className="divide-y divide-slate-100">{tasks.map((task, index) => { const done = completed.includes(task.id); return (
-            <button key={task.id} type="button" onClick={() => toggle(task.id)} aria-pressed={done} className={`group flex w-full items-center gap-4 px-4 py-4 text-left transition-colors sm:px-6 ${done ? 'bg-emerald-50/60' : 'hover:bg-blue-50/50'}`}>
-              <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl font-black transition-all ${done ? 'bg-emerald-600 text-white' : index === completed.length ? 'bg-blue-700 text-white shadow-lg shadow-blue-700/20' : 'bg-slate-100 text-slate-500'}`}>{done ? <Check className="h-5 w-5" /> : index + 1}</span>
-              <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-x-3 gap-y-1"><p className={`text-xs font-black uppercase tracking-wider ${done ? 'text-emerald-700' : 'text-blue-700'}`}>{task.day}</p><span className="text-xs font-semibold text-slate-400">{task.mode}</span></div><h3 className={`mt-1 font-black sm:text-lg ${done ? 'text-slate-500 line-through' : 'text-[#07183b]'}`}>{task.title}</h3><p className="mt-1 text-sm text-slate-500">{task.detail}</p></div>
-              <span className="hidden shrink-0 items-center gap-1.5 rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-500 sm:flex"><Clock3 className="h-4 w-4" /> {task.duration} min</span><ChevronRight className="h-5 w-5 shrink-0 text-slate-300 transition-transform group-hover:translate-x-1 group-hover:text-blue-600" />
-            </button>
-          )})}</div>
-        </section>
+    {showSettings && <section className="mt-6 rounded-3xl border border-blue-100 bg-white p-6 shadow-sm"><h2 className="text-xl font-black">Objetivo e disponibilidade</h2><div className="mt-5 grid gap-4 md:grid-cols-2"><label className="text-sm font-bold">Prova-alvo<input value={settings.examName} onChange={(event) => setSettings({ ...settings, examName: event.target.value })} placeholder="Ex.: Polícia Federal" className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3" /></label><label className="text-sm font-bold">Data da prova<input type="date" value={settings.examDate} onChange={(event) => setSettings({ ...settings, examDate: event.target.value })} className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3" /></label><label className="text-sm font-bold">Minutos por dia<input type="number" min={15} max={240} value={settings.minutesPerDay} onChange={(event) => setSettings({ ...settings, minutesPerDay: Number(event.target.value) })} className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3" /></label><label className="text-sm font-bold">Meta semanal<input type="number" min={1} max={14} value={settings.weeklyGoal} onChange={(event) => setSettings({ ...settings, weeklyGoal: Number(event.target.value) })} className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3" /></label></div><div className="mt-5"><p className="text-sm font-bold">Dias disponíveis</p><div className="mt-2 flex flex-wrap gap-2">{weekDays.map(([value, label]) => <button key={value} onClick={() => setSettings((current) => ({ ...current, availableDays: current.availableDays.includes(value) ? current.availableDays.filter((day) => day !== value) : [...current.availableDays, value] }))} className={`rounded-xl px-4 py-2 text-sm font-black ${settings.availableDays.includes(value) ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-600'}`}>{label}</button>)}</div></div><label className="mt-5 flex items-center gap-3 text-sm font-bold"><input type="checkbox" checked={settings.notificationsEnabled} onChange={(event) => setSettings({ ...settings, notificationsEnabled: event.target.checked })} /> Mostrar lembretes internos de revisão</label><button disabled={saving || !settings.availableDays.length} onClick={saveSettings} className="mt-6 inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3 font-black text-white disabled:opacity-50"><Save className="h-4 w-4" /> Salvar e recalcular</button></section>}
 
-        <aside className="min-w-0 space-y-5 lg:sticky lg:top-24">
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-600"><Target className="h-6 w-6" /></span><h2 className="mt-4 text-xl font-black">Foco da semana</h2><p className="mt-1 text-sm text-slate-500">Temas mais recorrentes nos seus simulados.</p><div className="mt-5 space-y-3">{planThemes.slice(0, 4).map((theme, index) => <div key={theme} className="flex items-center gap-3"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-xs font-black text-blue-700">{index + 1}</span><p className="min-w-0 truncate text-sm font-bold">{theme}</p></div>)}</div></section>
-          <section className="rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-6"><Sparkles className="h-6 w-6 text-blue-700" /><h2 className="mt-3 font-black">Pronto para praticar?</h2><p className="mt-1 text-sm leading-relaxed text-slate-600">Gere um novo simulado e atualize seu plano com conteúdos recentes.</p><Link href="/dashboard/novo" className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#ffc400] px-4 py-3 font-black text-[#06183d] shadow-sm transition hover:bg-yellow-300">Criar simulado <ChevronRight className="h-4 w-4" /></Link></section>
-          {percentage === 100 && <div className="flex items-center gap-3 rounded-2xl bg-emerald-600 p-4 text-white"><Trophy className="h-7 w-7 text-[#ffd84d]" /><div><p className="font-black">Semana concluída</p><p className="text-xs text-emerald-100">Ótimo trabalho. Continue assim!</p></div></div>}
-        </aside>
-      </div>
+    <section className="mt-7 grid gap-4 md:grid-cols-4"><Metric icon={Target} label="Meta semanal" value={`${completed.length}/${tasks.length}`} /><Metric icon={Flame} label="Sequência" value={`${streak} dia(s)`} /><Metric icon={BookOpenCheck} label="Revisões vencidas" value={String(dueReviews)} /><Metric icon={CalendarDays} label={settings.examName || 'Prova-alvo'} value={examCountdown === null ? 'Não definida' : `${examCountdown} dias`} /></section>
+
+    <div className="mt-7 grid gap-6 lg:grid-cols-[1fr_320px]"><section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-100 p-6"><div className="flex items-center justify-between"><div><h2 className="text-xl font-black">Próximas sessões</h2><p className="text-sm text-slate-500">Tarefas antigas não concluídas recebem prioridade automaticamente.</p></div><strong className="text-blue-700">{percentage}%</strong></div><div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-blue-700" style={{ width: `${percentage}%` }} /></div></div><div className="divide-y divide-slate-100">{tasks.map((task) => { const done = completed.includes(task.id); return <article key={task.id} className={done ? 'bg-emerald-50/50 p-5' : 'p-5'}><div className="flex gap-4"><button onClick={() => toggle(task)} aria-label={done ? 'Marcar como pendente' : 'Concluir tarefa'} className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${done ? 'bg-emerald-600 text-white' : 'bg-blue-50 text-blue-700'}`}>{done ? <Check className="h-5 w-5" /> : <Play className="h-5 w-5" />}</button><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2 text-xs font-bold"><span className="text-blue-700">{task.dayLabel}</span><span className="rounded-full bg-slate-100 px-2 py-1">{task.mode}</span><span className="inline-flex items-center gap-1 text-slate-500"><Clock3 className="h-3.5 w-3.5" />{task.duration} min</span></div><h3 className={`mt-2 font-black ${done ? 'text-slate-500 line-through' : ''}`}>{task.title}</h3><p className="mt-1 text-sm text-slate-500">{task.detail}</p><div className="mt-3 flex flex-wrap gap-3"><Link href={task.mode === 'Revisão espaçada' && dueReviews ? '/dashboard/caderno-erros' : task.focusUrl} className="text-sm font-black text-blue-700">{task.mode === 'Revisão espaçada' && dueReviews ? 'Revisar agora' : 'Criar simulado deste tema'}</Link></div></div></div></article>})}</div></section>
+      <aside className="space-y-5"><section className="rounded-3xl border border-slate-200 bg-white p-6"><div className="flex items-center gap-2"><History className="h-5 w-5 text-blue-700" /><h2 className="font-black">Histórico semanal</h2></div><div className="mt-4 space-y-3">{history.length ? history.map((item) => <div key={item.weekKey}><div className="flex justify-between text-sm"><span>Semana {item.weekKey.slice(5)}</span><strong>{item.completed}/{item.total}</strong></div><div className="mt-1 h-1.5 rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${item.total ? item.completed / item.total * 100 : 0}%` }} /></div></div>) : <p className="text-sm text-slate-500">O histórico aparecerá após suas primeiras atividades.</p>}</div></section><section className="rounded-3xl bg-[#061b46] p-6 text-white"><Bell className="h-6 w-6 text-[#ffc400]" /><h2 className="mt-3 font-black">Replanejamento automático</h2><p className="mt-2 text-sm text-blue-100">Tarefas pendentes, erros recentes e revisões vencidas entram no próximo cálculo sem você reorganizar tudo manualmente.</p></section></aside>
     </div>
-  );
+  </div>
+}
+
+function Metric({ icon: Icon, label, value }: { icon: typeof Target; label: string; value: string }) {
+  return <article className="rounded-2xl border border-slate-200 bg-white p-5"><Icon className="h-5 w-5 text-blue-700" /><p className="mt-3 text-2xl font-black">{value}</p><p className="text-sm text-slate-500">{label}</p></article>
 }

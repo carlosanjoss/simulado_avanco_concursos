@@ -1,0 +1,25 @@
+'use client'
+
+import { useState } from 'react'
+import { CheckCircle2, Scale, XCircle } from 'lucide-react'
+import { toast } from 'sonner'
+import type { Question } from '@/types/quiz'
+
+interface Item { id: string; owner: string; simulado: string; question: Question; status: string; sourceType: string; sourceName: string; licenseReference: string; versionCount: number; updatedAt: string }
+
+export default function CurationClient({ initialItems }: { initialItems: Item[] }) {
+  const [items, setItems] = useState(initialItems)
+  const [status, setStatus] = useState('PENDING')
+  const visible = status === 'ALL' ? items : items.filter((item) => item.status === status)
+
+  async function decide(item: Item, nextStatus: 'CURATED' | 'REJECTED') {
+    if (item.sourceType === 'OFFICIAL_LICENSED' && (!item.sourceName.trim() || !item.licenseReference.trim())) return toast.error('Informe a fonte e a licença antes de aprovar uma questão oficial.')
+    const response = await fetch(`/api/admin/question-bank/${item.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: nextStatus, sourceType: item.sourceType, sourceName: item.sourceName || null, licenseReference: item.licenseReference || null }) })
+    const data = await response.json(); if (!response.ok) return toast.error(data.error || 'Não foi possível concluir a curadoria.')
+    setItems((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, status: nextStatus } : currentItem)); toast.success(nextStatus === 'CURATED' ? 'Questão aprovada.' : 'Questão devolvida para revisão.')
+  }
+
+  function update(id: string, changes: Partial<Item>) { setItems((current) => current.map((item) => item.id === id ? { ...item, ...changes } : item)) }
+
+  return <div className="mx-auto max-w-7xl p-4 pb-10 sm:p-6 lg:p-7"><p className="text-xs font-black uppercase tracking-widest text-blue-700">Administração editorial</p><h1 className="mt-2 text-3xl font-black">Curadoria de questões</h1><p className="mt-2 max-w-3xl text-slate-600">Analise questões enviadas pelos usuários. A marca “oficial/licenciada” só pode ser aprovada com fonte e permissão documentadas.</p><div className="mt-6 flex flex-wrap gap-2">{[['PENDING', 'Pendentes'], ['CURATED', 'Curadas'], ['REJECTED', 'Revisão solicitada'], ['ALL', 'Todas']].map(([value, label]) => <button key={value} onClick={() => setStatus(value)} className={`rounded-xl px-4 py-2 font-bold ${status === value ? 'bg-blue-700 text-white' : 'border bg-white'}`}>{label}</button>)}</div><section className="mt-5 grid gap-5">{visible.map((item) => <article key={item.id} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><div className="flex flex-wrap justify-between gap-3"><div><p className="text-xs font-bold text-blue-700">{item.owner} · {item.simulado}</p><h2 className="mt-2 text-lg font-black">{item.question.enunciado}</h2></div><span className="h-fit rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">{item.versionCount} versão(ões)</span></div><div className="mt-4 grid gap-2 sm:grid-cols-2">{item.question.opcoes.map((option) => <div key={option} className="rounded-xl border bg-slate-50 px-4 py-2 text-sm">{option}</div>)}</div><div className="mt-4 rounded-xl bg-blue-50 p-4 text-sm"><strong>Resposta {item.question.resposta_correta}</strong><p className="mt-1">{item.question.justificativa}</p></div><div className="mt-5 grid gap-3 md:grid-cols-3"><label className="text-sm font-bold">Classificação<select value={item.sourceType} onChange={(event) => update(item.id, { sourceType: event.target.value })} className="mt-2 w-full rounded-xl border px-3 py-2.5"><option value="USER_GENERATED">Gerada do material do usuário</option><option value="OFFICIAL_LICENSED">Oficial/licenciada</option></select></label><label className="text-sm font-bold">Fonte<input value={item.sourceName} onChange={(event) => update(item.id, { sourceName: event.target.value })} placeholder="Órgão, banca ou publicação" className="mt-2 w-full rounded-xl border px-3 py-2.5" /></label><label className="text-sm font-bold">Referência da licença/permissão<input value={item.licenseReference} onChange={(event) => update(item.id, { licenseReference: event.target.value })} placeholder="URL, contrato ou autorização" className="mt-2 w-full rounded-xl border px-3 py-2.5" /></label></div><div className="mt-5 flex flex-wrap gap-3"><button onClick={() => decide(item, 'CURATED')} className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 font-black text-white"><CheckCircle2 className="h-4 w-4" /> Aprovar</button><button onClick={() => decide(item, 'REJECTED')} className="inline-flex items-center gap-2 rounded-xl border border-rose-200 px-4 py-2.5 font-black text-rose-700"><XCircle className="h-4 w-4" /> Solicitar revisão</button></div></article>)}{!visible.length && <div className="rounded-3xl border bg-white p-12 text-center"><Scale className="mx-auto h-12 w-12 text-blue-700" /><p className="mt-4 font-black">Nenhuma questão neste status.</p></div>}</section></div>
+}

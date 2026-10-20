@@ -4,7 +4,7 @@ const required = [
   'NEXT_PUBLIC_PRIVACY_EMAIL',
   'NUVEMSHOP_STORE_ID',
   'NUVEMSHOP_ACCESS_TOKEN',
-  'NUVEMSHOP_APP_ID',
+  'NUVEMSHOP_APP_SECRET',
   'NUVEMSHOP_WEBHOOK_SECRET',
   'NEXT_PUBLIC_NUVEMSHOP_PRO_MONTHLY_URL',
   'NEXT_PUBLIC_PRO_MONTHLY_PRICE',
@@ -31,6 +31,9 @@ if (process.env.PUBLIC_SIGNUP_ENABLED !== process.env.NEXT_PUBLIC_PUBLIC_SIGNUP_
 }
 if (!process.env.NUVEMSHOP_PRO_MONTHLY_PRODUCT_ID?.trim()) {
   process.stdout.write('Aviso: sem NUVEMSHOP_PRO_MONTHLY_PRODUCT_ID; o produto deverá usar o SKU AVANCO_PRO_MONTHLY.\n')
+}
+if (!process.env.NUVEMSHOP_PRO_MONTHLY_VARIANT_ID?.trim()) {
+  process.stdout.write('Aviso: sem NUVEMSHOP_PRO_MONTHLY_VARIANT_ID; confirme se o ID configurado identifica o produto ou use o SKU.\n')
 }
 if (process.env.NEXT_PUBLIC_NUVEMSHOP_PRO_ANNUAL_URL?.trim() && !process.env.NEXT_PUBLIC_PRO_ANNUAL_PRICE?.trim()) {
   problems.push('NEXT_PUBLIC_PRO_ANNUAL_PRICE: obrigatório quando o checkout anual estiver ativo')

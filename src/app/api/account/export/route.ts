@@ -14,13 +14,14 @@ export async function GET(request: NextRequest) {
     select: {
       id: true, email: true, name: true, imageUrl: true, accountStatus: true, emailVerifiedAt: true,
       termsAcceptedAt: true, legalVersion: true, createdAt: true, updatedAt: true, lastLoginAt: true,
-      subscription: { select: { provider: true, planCode: true, status: true, billingInterval: true, currentPeriodStart: true, currentPeriodEnd: true, lastPaidAt: true, canceledAt: true, createdAt: true, updatedAt: true } },
+      subscription: { select: { provider: true, planCode: true, status: true, billingInterval: true, providerOrderId: true, currentPeriodStart: true, currentPeriodEnd: true, lastPaidAt: true, canceledAt: true, createdAt: true, updatedAt: true } },
       monthlyUsage: { select: { monthKey: true, count: true, createdAt: true, updatedAt: true }, orderBy: { monthKey: 'asc' } },
-      simulados: { select: { id: true, titulo: true, totalQuestoes: true, temasFoco: true, pdfNome: true, pdfHash: true, sourceDocumentId: true, materials: { select: { documentId: true, fileName: true, createdAt: true } }, questoesJson: true, difficultyTarget: true, ocrUsed: true, status: true, createdAt: true, updatedAt: true, deletedAt: true } },
-      tentativas: { select: { id: true, simuladoId: true, respostas: true, pontuacao: true, totalQuestoes: true, percentual: true, currentIndex: true, selectedAnswers: true, concluidoEm: true, durationSeconds: true, createdAt: true, updatedAt: true } },
+      simulados: { select: { id: true, titulo: true, totalQuestoes: true, temasFoco: true, pdfNome: true, pdfHash: true, sourceDocumentId: true, materials: { select: { documentId: true, fileName: true, createdAt: true } }, questoesJson: true, difficultyTarget: true, ocrUsed: true, assessmentKind: true, examBoard: true, examMode: true, scoringMode: true, timeLimitMinutes: true, pauseAllowed: true, feedbackMode: true, examNoticeId: true, status: true, createdAt: true, updatedAt: true, deletedAt: true } },
+      tentativas: { select: { id: true, simuladoId: true, respostas: true, pontuacao: true, totalQuestoes: true, percentual: true, currentIndex: true, selectedAnswers: true, markedQuestions: true, concluidoEm: true, durationSeconds: true, createdAt: true, updatedAt: true } },
       feedbacks: { select: { id: true, simuladoId: true, questaoId: true, type: true, message: true, createdAt: true } },
       studyPlanProgress: { select: { weekKey: true, taskKey: true, completed: true, completedAt: true, createdAt: true, updatedAt: true } },
       reviewCards: { select: { simuladoId: true, questionId: true, questionJson: true, lastAnswer: true, repetitions: true, intervalDays: true, easeFactor: true, dueAt: true, lastReviewedAt: true, masteredAt: true, createdAt: true, updatedAt: true } },
+      examNotices: { select: { id: true, title: true, examDate: true, sourceFileName: true, syllabusJson: true, active: true, createdAt: true, updatedAt: true } },
     },
   })
   if (!user) return NextResponse.json({ error: 'Conta não encontrada' }, { status: 404 })

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { BrandLogo } from '@/components/shared/BrandLogo'
 import { useRouter } from 'next/navigation'
+import { ThemeToggle } from '@/components/ThemeToggle'
 
 export default function SignUpPage() {
   const router = useRouter()
@@ -74,7 +75,8 @@ export default function SignUpPage() {
   }
 
   return (
-    <main className="min-h-screen bg-white flex items-center justify-center p-4">
+    <main className="relative flex min-h-screen items-center justify-center bg-white p-4 dark:bg-[#071120]">
+      <div className="absolute right-5 top-5"><ThemeToggle /></div>
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link href="/" className="inline-block mb-6"><BrandLogo /></Link>

@@ -1,10 +1,14 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowRight, BarChart3, CalendarDays, Check, CheckCircle2, ChevronDown, Crown, FileCheck2, Layers3, LockKeyhole, MessageSquareText, NotebookTabs, PenLine, ScanText, ShieldCheck, Sparkles, Target, UploadCloud } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { ArrowRight, BarChart3, CalendarDays, Check, CheckCircle2, ChevronDown, Crown, FileCheck2, Layers3, LockKeyhole, MessageSquareText, NotebookTabs, PenLine, ScanText, ShieldCheck, Sparkles, Target, UploadCloud, X } from 'lucide-react'
 import { BrandLogo } from '@/components/shared/BrandLogo'
 import { useAuth } from '@/components/providers'
+import { SignInForm } from '@/components/auth/SignInForm'
+import { ThemeToggle } from '@/components/ThemeToggle'
 
 const benefits = [
   { icon: Sparkles, title: 'Rápido e prático', text: 'Gere um simulado completo em poucos minutos.' },
@@ -29,14 +33,32 @@ const faq = [
   ['Quantas questões são geradas?', 'No plano Grátis, você escolhe 10 ou 20 questões. No Pro, também pode gerar 30, 40 ou 50 questões por simulado.'],
   ['Posso escolher os assuntos?', 'Sim. O campo de tópicos de foco permite priorizar conteúdos presentes no PDF.'],
   ['Quais PDFs são aceitos?', 'Arquivos PDF com texto extraível, até 20 MB e no máximo 400 páginas.'],
-  ['O que o plano Pro libera?', 'O Pro aumenta o limite para 30 gerações mensais e inclui até 50 questões, OCR, editor e regeneração, relatórios avançados, plano de estudos, revisão espaçada, múltiplos materiais e banco completo de questões.'],
+  ['O que o plano Pro libera?', 'O Pro aumenta o limite para 30 gerações mensais e inclui até 50 questões, OCR, editor e regeneração, relatórios avançados, plano de estudos, revisão espaçada, múltiplos materiais e um banco privado com todas as questões geradas por você.'],
 ]
 
 export default function LandingPage() {
-  const { user } = useAuth()
+  const router = useRouter()
+  const { user, refresh } = useAuth()
+  const [loginOpen, setLoginOpen] = useState(false)
+
+  useEffect(() => {
+    if (!loginOpen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setLoginOpen(false) }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => { document.body.style.overflow = previousOverflow; window.removeEventListener('keydown', closeOnEscape) }
+  }, [loginOpen])
+
+  const finishLogin = async () => {
+    await refresh()
+    setLoginOpen(false)
+    router.push('/dashboard')
+    router.refresh()
+  }
   return (
-    <div className="min-h-screen bg-white text-[#06183d]">
-      <header className="h-20 bg-white/95 backdrop-blur border-b border-slate-100 sticky top-0 z-50">
+    <div className="min-h-screen bg-white text-[#06183d] dark:bg-[#071120] dark:text-slate-100">
+      <header className="sticky top-0 z-50 h-20 border-b border-slate-100 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-[#0b1728]/95">
         <div className="max-w-7xl mx-auto h-full px-5 flex items-center justify-between">
           <Link href="/" aria-label="Página inicial"><BrandLogo /></Link>
           <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-600">
@@ -48,17 +70,18 @@ export default function LandingPage() {
             <Link href="#faq" className="hover:text-blue-700">FAQ</Link>
           </nav>
           <div className="flex items-center gap-3">
+            <ThemeToggle />
             {user ? (
               <Link href="/dashboard" className="px-5 py-2.5 rounded-xl bg-blue-700 text-white font-semibold">Dashboard</Link>
             ) : (
-              <Link href="/sign-in" className="px-5 py-2.5 rounded-xl bg-blue-700 text-white font-semibold">Entrar</Link>
+              <button type="button" onClick={() => setLoginOpen(true)} className="px-5 py-2.5 rounded-xl bg-blue-700 text-white font-semibold">Entrar</button>
             )}
           </div>
         </div>
       </header>
 
       <main>
-        <section id="inicio" className="relative overflow-hidden bg-gradient-to-br from-white via-white to-blue-50">
+        <section id="inicio" className="relative overflow-hidden bg-gradient-to-br from-white via-white to-blue-50 dark:from-[#071120] dark:via-[#09182b] dark:to-[#0b2342]">
           <div className="absolute right-0 top-0 w-[48%] h-full avanco-navy-deep hidden lg:block [clip-path:polygon(18%_0,100%_0,100%_100%,0_100%)]" />
           <div className="max-w-7xl mx-auto px-5 py-16 lg:py-24 grid lg:grid-cols-[1fr_1.15fr] items-center gap-8 min-h-[650px] relative">
             <div className="relative z-10">
@@ -69,9 +92,13 @@ export default function LandingPage() {
                 {user ? (
                   <Link href="/dashboard/novo" className="bg-blue-700 hover:bg-blue-800 text-white px-7 py-4 rounded-xl font-bold flex items-center gap-3 shadow-xl shadow-blue-200">Criar novo simulado <ArrowRight className="w-5 h-5" /></Link>
                 ) : (
-                  <Link href="/sign-in" className="bg-blue-700 hover:bg-blue-800 text-white px-7 py-4 rounded-xl font-bold flex items-center gap-3 shadow-xl shadow-blue-200">Entrar <ArrowRight className="w-5 h-5" /></Link>
+                  <button type="button" onClick={() => setLoginOpen(true)} className="bg-blue-700 hover:bg-blue-800 text-white px-7 py-4 rounded-xl font-bold flex items-center gap-3 shadow-xl shadow-blue-200">Entrar <ArrowRight className="w-5 h-5" /></button>
                 )}
-                <Link href="#planos" className="px-7 py-4 rounded-xl border border-slate-300 font-bold hover:bg-slate-50">Conhecer o Pro</Link>
+                {user ? (
+                  <Link href="/dashboard/novo" className="px-7 py-4 rounded-xl border border-blue-700 bg-white text-blue-700 font-bold hover:bg-blue-50">Novo simulado</Link>
+                ) : (
+                  <Link href="#planos" className="px-7 py-4 rounded-xl border border-slate-300 font-bold hover:bg-slate-50">Conhecer o Pro</Link>
+                )}
               </div>
               <p className="mt-4 text-sm font-semibold text-slate-500">Comece grátis com 2 gerações por mês e até 20 questões por simulado.</p>
               <div className="mt-10 flex items-center gap-3 text-sm text-slate-600"><CheckCircle2 className="h-6 w-6 text-emerald-500" /><p><strong className="text-[#06183d]">Questões rastreáveis</strong><br />com página e trecho do material usado</p></div>
@@ -104,7 +131,7 @@ export default function LandingPage() {
             <div className="mx-auto mt-12 grid max-w-5xl gap-6 lg:grid-cols-2 lg:items-stretch">
               <article className="flex flex-col rounded-3xl border border-slate-200 bg-white p-7 shadow-sm sm:p-9"><p className="text-sm font-black uppercase tracking-[.16em] text-slate-500">Plano Grátis</p><h3 className="mt-3 text-3xl font-black">Comece sem pagar</h3><p className="mt-3 text-slate-600">Para conhecer o método com os recursos essenciais.</p><ul className="my-8 space-y-4">{['2 gerações por mês','Até 20 questões por simulado','Dificuldade configurável','Histórico básico de desempenho','Até 3 materiais ativos','Um material por simulado'].map((feature) => <li key={feature} className="flex gap-3 font-semibold text-slate-700"><span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600"><Check className="h-4 w-4" /></span>{feature}</li>)}</ul><Link href={user ? '/dashboard/novo' : '/sign-up'} className="mt-auto flex items-center justify-center rounded-xl border border-blue-700 px-6 py-3.5 font-black text-blue-700 hover:bg-blue-50">{user ? 'Criar simulado grátis' : 'Criar conta grátis'}</Link></article>
 
-              <article className="relative flex flex-col overflow-hidden rounded-3xl bg-[#061b46] p-7 text-white shadow-2xl shadow-blue-200 sm:p-9"><div className="absolute -right-16 -top-16 h-52 w-52 rounded-full bg-blue-500/20 blur-2xl" /><span className="relative inline-flex w-fit items-center gap-2 rounded-full bg-[#ffc400] px-3 py-1.5 text-xs font-black uppercase tracking-wider text-[#06183d]"><Crown className="h-4 w-4" /> Experiência completa</span><h3 className="relative mt-5 text-3xl font-black">Avanço Pro</h3><p className="relative mt-3 text-blue-100">Mais simulados e ferramentas para transformar desempenho em rotina de aprovação.</p><ul className="relative my-8 grid gap-4 sm:grid-cols-2">{['30 gerações por mês','Até 50 questões','OCR para PDFs digitalizados','Editor e regeneração','Relatórios avançados','Plano de estudos','Caderno de erros','Até 5 materiais por simulado','Banco completo de questões'].map((feature) => <li key={feature} className="flex gap-3 text-sm font-bold"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ffc400] text-[#06183d]"><Check className="h-3.5 w-3.5" /></span>{feature}</li>)}</ul><Link href="/precos" className="relative mt-auto flex items-center justify-center gap-2 rounded-xl bg-[#ffc400] px-6 py-3.5 font-black text-[#06183d] hover:bg-yellow-300">Ver preços e assinar <ArrowRight className="h-5 w-5" /></Link></article>
+              <article className="relative flex flex-col overflow-hidden rounded-3xl bg-[#061b46] p-7 text-white shadow-2xl shadow-blue-200 sm:p-9"><div className="absolute -right-16 -top-16 h-52 w-52 rounded-full bg-blue-500/20 blur-2xl" /><span className="relative inline-flex w-fit items-center gap-2 rounded-full bg-[#ffc400] px-3 py-1.5 text-xs font-black uppercase tracking-wider text-[#06183d]"><Crown className="h-4 w-4" /> Experiência completa</span><h3 className="relative mt-5 text-3xl font-black">Avanço Pro</h3><p className="relative mt-3 text-blue-100">Mais simulados e ferramentas para transformar desempenho em rotina de aprovação.</p><ul className="relative my-8 grid gap-4 sm:grid-cols-2">{['30 gerações por mês','Até 50 questões','OCR para PDFs digitalizados','Editor e regeneração','Relatórios avançados','Plano de estudos','Caderno de erros','Até 5 materiais por simulado','Banco privado das questões geradas por você'].map((feature) => <li key={feature} className="flex gap-3 text-sm font-bold"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#ffc400] text-[#06183d]"><Check className="h-3.5 w-3.5" /></span>{feature}</li>)}</ul><Link href="/precos" className="relative mt-auto flex items-center justify-center gap-2 rounded-xl bg-[#ffc400] px-6 py-3.5 font-black text-[#06183d] hover:bg-yellow-300">Ver preços e assinar <ArrowRight className="h-5 w-5" /></Link></article>
             </div>
 
             <div className="mt-16"><div className="text-center"><p className="text-xs font-black uppercase tracking-[.18em] text-blue-700">O que você ganha com o Pro</p><h3 className="mt-3 text-3xl font-black">Ferramentas para estudar, corrigir e revisar</h3></div><div className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{proFeatures.map(({ icon: Icon, title, text }) => <article key={title} className="rounded-2xl border border-blue-100 bg-blue-50/40 p-6"><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-blue-700 shadow-sm"><Icon className="h-5 w-5" /></span><h4 className="mt-4 text-lg font-black">{title}</h4><p className="mt-2 text-sm leading-relaxed text-slate-600">{text}</p></article>)}</div></div>
@@ -121,6 +148,7 @@ export default function LandingPage() {
       </main>
 
       <footer className="bg-[#02132f] text-blue-100"><div className="max-w-7xl mx-auto px-5 py-10 flex flex-col sm:flex-row items-center justify-between gap-6"><BrandLogo light /><div className="flex flex-wrap justify-center gap-5 text-sm"><Link href="/precos">Preços</Link><Link href="/termos">Termos</Link><Link href="/privacidade">Privacidade</Link></div><p className="text-sm">© 2026 Avanço Simulados.</p></div></footer>
+      {loginOpen && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#02132f]/70 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setLoginOpen(false) }}><section role="dialog" aria-modal="true" aria-labelledby="login-title" className="dashboard-scrollbar relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-3xl border border-white/30 bg-white p-6 shadow-2xl sm:p-8"><button type="button" onClick={() => setLoginOpen(false)} className="absolute right-4 top-4 rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900" aria-label="Fechar login"><X className="h-5 w-5" /></button><div className="mb-7 pr-10"><p className="text-xs font-black uppercase tracking-[.18em] text-blue-700">Bem-vindo de volta</p><h2 id="login-title" className="mt-2 text-3xl font-black">Entrar na sua conta</h2><p className="mt-2 text-sm text-slate-600">Continue seus simulados e acompanhe sua evolução.</p></div><SignInForm onSuccess={finishLogin} autoFocus /></section></div>}
     </div>
   )
 }

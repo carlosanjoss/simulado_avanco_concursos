@@ -72,6 +72,17 @@ npm audit --omit=dev
 npm run test:e2e
 ```
 
+O fluxo E2E de OCR usa uma conta Pro e os serviços reais, por isso fica desabilitado por padrão. Para executar o upload completo com páginas digitalizadas, inclinadas, degradadas e em duas colunas:
+
+```powershell
+$env:E2E_RUN_OCR='1'
+$env:E2E_PRO_EMAIL='conta-pro@exemplo.com'
+$env:E2E_PRO_PASSWORD='senha-da-conta-de-teste'
+npm run test:e2e -- ocr-generation.spec.ts
+```
+
+Use uma conta exclusiva de testes: o cenário cria um simulado e consome uma geração.
+
 ## Deploy na Vercel
 
 1. Vincule o projeto à Vercel e configure as variáveis de `.env.example` em Production e Preview.

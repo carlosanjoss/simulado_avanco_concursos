@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
-import { generateQuizBatchWithFallback } from '@/lib/ai-providers'
+import { generateQuizBatchWithFallback, getQuizGenerationMetrics, QUESTIONS_PER_BATCH } from '@/lib/ai-providers'
 import { embedTexts, vectorizePdfText } from '@/lib/embeddings'
 import { extractTextFromPDF, validatePDFBuffer, validatePDFFile } from '@/lib/pdf-utils'
 import { buildQuizPrompts } from '@/lib/prompts/quiz-generation'
@@ -10,7 +10,9 @@ import { quizSchema } from '@/lib/validations/quiz'
 import {
   DUPLICATE_REPAIR_ATTEMPTS,
   findDuplicateQuestionIds,
+  getQuestionGroundingIssues,
   getQuestionQualityIssues,
+  normalizeQuestionSourceCitation,
   mapWithConcurrency,
   QUESTION_GENERATION_ATTEMPTS,
   QUESTION_GENERATION_CONCURRENCY,
@@ -32,6 +34,8 @@ import { getUserPlanAccess } from '@/lib/plan-access'
 const MAX_FOCUS_LENGTH = 500
 const ALLOWED_QUESTION_COUNTS = new Set([10, 20, 30, 40, 50])
 const ALLOWED_DIFFICULTIES = new Set(['Fácil', 'Médio', 'Avançado', 'Misto'])
+const ALLOWED_BOARDS = new Set(['GENERIC', 'CEBRASPE', 'FGV', 'FCC', 'VUNESP', 'AOCP'])
+const ALLOWED_FORMATS = new Set(['FOUR_OPTIONS', 'FIVE_OPTIONS', 'TRUE_FALSE'])
 export const maxDuration = 300
 export const dynamic = 'force-dynamic'
 
@@ -79,6 +83,7 @@ async function audit(data: {
   provider?: string
   status: string
   durationMs: number
+  tokensEstimated?: number
   errorMessage?: string
   metadata?: Record<string, unknown>
 }) {
@@ -89,6 +94,7 @@ async function audit(data: {
         action: 'generate_quiz',
         provider: data.provider,
         durationMs: data.durationMs,
+        tokensEstimated: data.tokensEstimated,
         status: data.status,
         errorMessage: data.errorMessage,
         metadata: data.metadata ? JSON.stringify(data.metadata) : undefined,
@@ -115,6 +121,17 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
 
   let usageReserved = false
   let userEmail = user.email
+  const generationMetrics = { requests: 0, retries: 0, truncations: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, duplicateRepairs: 0, groundingFailures: 0, qualityFailures: 0 }
+
+  const collectMetrics = (metrics?: { requests: number; retries: number; truncations: number; promptTokens: number; completionTokens: number; totalTokens: number }) => {
+    if (!metrics) return
+    generationMetrics.requests += metrics.requests
+    generationMetrics.retries += metrics.retries
+    generationMetrics.truncations += metrics.truncations
+    generationMetrics.promptTokens += metrics.promptTokens
+    generationMetrics.completionTokens += metrics.completionTokens
+    generationMetrics.totalTokens += metrics.totalTokens
+  }
 
   try {
     const formData = await request.formData()
@@ -165,6 +182,17 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
     }
     const questionCount = requestedCount
     const difficultyTarget = requestedDifficulty as 'Fácil' | 'Médio' | 'Avançado' | 'Misto'
+    const examBoard = String(formData.get('examBoard') || 'GENERIC')
+    const answerFormat = String(formData.get('answerFormat') || (examBoard === 'CEBRASPE' ? 'TRUE_FALSE' : 'FOUR_OPTIONS'))
+    const examMode = formData.get('examMode') === 'true'
+    const assessmentKind = formData.get('assessmentKind') === 'DIAGNOSTIC' ? 'DIAGNOSTIC' : 'PRACTICE'
+    const scoringMode = examBoard === 'CEBRASPE' && answerFormat === 'TRUE_FALSE' ? 'NEGATIVE_ONE' : 'STANDARD'
+    const timeLimitMinutes = Math.max(0, Math.min(600, Number(formData.get('timeLimitMinutes') || 0))) || null
+    const pauseAllowed = formData.get('pauseAllowed') !== 'false'
+    const examNoticeId = typeof formData.get('examNoticeId') === 'string' ? String(formData.get('examNoticeId')) : null
+    if (!ALLOWED_BOARDS.has(examBoard) || !ALLOWED_FORMATS.has(answerFormat)) return errorResponse('INVALID_AI_RESPONSE', 'Formato de prova inválido.', 400)
+    if ((examBoard !== 'GENERIC' || examMode || assessmentKind === 'DIAGNOSTIC') && !access.examBoardModes) return errorResponse('PLAN_RESTRICTION', 'Modos de banca e diagnóstico são exclusivos do plano Pro.', 403)
+    if (examNoticeId && !(await prisma.examNotice.findFirst({ where: { id: examNoticeId, userId: user.id } }))) return errorResponse('INVALID_AI_RESPONSE', 'Edital inválido.', 400)
     let ocrUsed = formData.get('ocrUsed') === 'true'
     if (!documentIds.length && !(fileEntry instanceof File)) {
       return errorResponse('INVALID_FILE', 'Selecione ao menos um material ou arquivo PDF.', 400)
@@ -260,68 +288,117 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
     const questionsById = new Map<number, Question>()
     const failureReasons = new Map<number, string>()
     let currentGenerationAttempt = 1
+    // Generate in batches of 5 questions (6 batches for 30 questions)
+    const batches = []
+    for (let i = 0; i < questionCount; i += QUESTIONS_PER_BATCH) {
+      const batchEnd = Math.min(i + QUESTIONS_PER_BATCH, questionCount)
+      batches.push({
+        startId: i + 1,
+        count: batchEnd - i,
+        questionIds: Array.from({ length: batchEnd - i }, (_, idx) => i + 1 + idx)
+      })
+    }
 
-    const generateQuestionIds = async (questionIds: number[], avoidQuestions?: string[]) => {
-      const failedIds: number[] = []
-      await mapWithConcurrency(questionIds, QUESTION_GENERATION_CONCURRENCY, async (questionId) => {
-        const questionContext = questionContexts.get(questionId)
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex]
+      let batchRetry = 0
+      let batchSuccess = false
+      
+      while (batchRetry < QUESTION_GENERATION_ATTEMPTS && !batchSuccess) {
+        currentGenerationAttempt = batchRetry + 1
+        const allPreviousEnunciados = Array.from(questionsById.values()).map((q) => q.enunciado)
+        
+        // Build context for this batch - combine all question contexts
+        const batchContexts = batch.questionIds.map(id => questionContexts.get(id)).filter(Boolean)
+        const uniqueContextParts = Array.from(new Set(
+          batchContexts.map((context) => context?.text.trim()).filter((text): text is string => Boolean(text)),
+        ))
+        const combinedContext = uniqueContextParts.join('\n\n---\n\n')
+        
         const prompts = buildQuizPrompts({
-          context: questionContext?.text || '',
+          context: combinedContext,
           focusTopics,
-          domain: questionContext?.domain,
-          retrievalObjective: questionContext?.objective,
+          domain: batchContexts[0]?.domain || 'general',
+          retrievalObjective: batchContexts[0]?.objective,
           totalQuestions: questionCount,
           difficultyTarget,
           batch: {
-            number: questionId,
-            startId: questionId,
-            endId: questionId,
+            startId: batch.startId,
+            count: batch.count,
             previousQuestions: Array.from(questionsById.values()).map((question) => question.enunciado),
           },
-          avoidQuestions,
+          avoidQuestions: allPreviousEnunciados,
+          questionObjectives: batch.questionIds.map((id) => {
+            const context = questionContexts.get(id)
+            return { id, objective: context?.objective, pageFrom: context?.pageWindow.from, pageTo: context?.pageWindow.to }
+          }),
+          examBoard: examBoard as 'GENERIC' | 'CEBRASPE' | 'FGV' | 'FCC' | 'VUNESP' | 'AOCP',
+          answerFormat: answerFormat as 'FOUR_OPTIONS' | 'FIVE_OPTIONS' | 'TRUE_FALSE',
         })
+        
         try {
-          const { batch, providerUsed } = await generateQuizBatchWithFallback(
+          const { batch: generatedBatch, providerUsed, metrics } = await generateQuizBatchWithFallback(
             prompts.systemPrompt,
             prompts.userPrompt,
-            questionId,
+            batch.startId,
+            batch.count,
+            undefined,
+            answerFormat as 'FOUR_OPTIONS' | 'FIVE_OPTIONS' | 'TRUE_FALSE',
           )
-          quizTitle ||= batch.titulo
-          const question = batch.questoes[0]
-          const qualityIssues = getQuestionQualityIssues(question)
-          if (qualityIssues.length > 0) {
-            throw new Error(`INVALID_AI_QUALITY: ${qualityIssues.join('; ')}`)
+          collectMetrics(metrics)
+          
+          quizTitle ||= generatedBatch.titulo
+          
+          // Validate each question
+          let batchValid = true
+          for (const question of generatedBatch.questoes) {
+            const sources = questionContexts.get(question.id)?.sources || []
+            question.sources = sources
+            const normalizedQuestion = normalizeQuestionSourceCitation(question)
+            const qualityIssues = getQuestionQualityIssues(normalizedQuestion)
+            if (qualityIssues.length > 0) {
+              generationMetrics.qualityFailures += 1
+              batchValid = false
+              failureReasons.set(question.id, `INVALID_AI_QUALITY: ${qualityIssues.join('; ')}`)
+              break
+            }
+            const groundingIssues = getQuestionGroundingIssues(normalizedQuestion)
+            if (groundingIssues.length > 0) {
+              generationMetrics.groundingFailures += 1
+              batchValid = false
+              failureReasons.set(question.id, `INVALID_AI_GROUNDING: ${groundingIssues.join('; ')}`)
+              break
+            }
+            questionsById.set(normalizedQuestion.id, normalizedQuestion)
           }
-          const sources = questionContext?.sources || []
-          question.sources = sources
-          if (sources.length > 0 && !/p[aá]gina\s+\d+/i.test(question.justificativa)) {
-            const pages = Array.from(new Set(sources.map((source) => source.pageNumber))).slice(0, 4)
-            question.justificativa = `${question.justificativa} Fonte: ${pages.length === 1 ? 'Página' : 'Páginas'} ${pages.join(', ')}.`
+          
+          if (batchValid) {
+            providersUsed.add(providerUsed)
+            batch.questionIds.forEach(id => failureReasons.delete(id))
+            batchSuccess = true
+            
+            await reportProgress?.({
+              phase: 'generating', completed: questionsById.size, total: questionCount,
+              failed: 0, attempt: currentGenerationAttempt,
+              message: `${questionsById.size} de ${questionCount} questões concluídas`,
+            })
+          } else {
+            // Remove any questions that were added
+            generatedBatch.questoes.forEach(q => questionsById.delete(q.id))
+            batchRetry++
           }
-          questionsById.set(questionId, question)
-          providersUsed.add(providerUsed)
-          failureReasons.delete(questionId)
         } catch (error) {
-          failedIds.push(questionId)
-          failureReasons.set(questionId, error instanceof Error ? error.message : 'Erro desconhecido')
+          collectMetrics(getQuizGenerationMetrics(error))
+          batch.questionIds.forEach(id => failureReasons.set(id, error instanceof Error ? error.message : 'Erro desconhecido'))
+          batchRetry++
         }
-        await reportProgress?.({
-          phase: 'generating', completed: questionsById.size, total: questionCount,
-          failed: failedIds.length, attempt: currentGenerationAttempt,
-          message: `${questionsById.size} de ${questionCount} questões concluídas`,
-        })
-      })
-      return failedIds.sort((a, b) => a - b)
-    }
-
-    let pendingIds = Array.from({ length: questionCount }, (_, index) => index + 1)
-    for (let attempt = 1; attempt <= QUESTION_GENERATION_ATTEMPTS && pendingIds.length > 0; attempt += 1) {
-      currentGenerationAttempt = attempt
-      pendingIds = await generateQuestionIds(pendingIds)
-    }
-    if (pendingIds.length > 0) {
-      const errors = pendingIds.map((id) => `Questão ${id}: ${failureReasons.get(id) || 'falhou'}`).join('; ')
-      throw new Error(`INVALID_AI_RESPONSE: ${errors}`)
+      }
+      
+      if (!batchSuccess) {
+        const batchReasons = Array.from(new Set(batch.questionIds.map((id) => failureReasons.get(id)).filter(Boolean)))
+        const reason = batchReasons.length ? `: ${batchReasons.join(' | ')}` : ''
+        throw new Error(`INVALID_AI_RESPONSE: falha ao gerar lote ${batchIndex + 1} (questões ${batch.startId}-${batch.startId + batch.count - 1})${reason}`)
+      }
     }
 
     for (let repair = 0; repair < DUPLICATE_REPAIR_ATTEMPTS; repair += 1) {
@@ -332,11 +409,59 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
       })
       const duplicateIds = findDuplicateQuestionIds(currentQuestions).sort((a, b) => a - b)
       if (duplicateIds.length === 0) break
-      const avoidQuestions = duplicateIds.map(id => currentQuestions.find(q => q.id === id)?.enunciado).filter(Boolean) as string[]
+      generationMetrics.duplicateRepairs += duplicateIds.length
+      const avoidQuestions = Array.from(questionsById.values()).map((q) => q.enunciado)
       duplicateIds.forEach((id) => questionsById.delete(id))
-      const failedDuplicateIds = await generateQuestionIds(duplicateIds, avoidQuestions)
-      if (failedDuplicateIds.length > 0) {
-        throw new Error(`INVALID_AI_RESPONSE: falha ao regenerar questões duplicadas ${failedDuplicateIds.join(', ')}`)
+      
+      // Regenerate duplicates one by one
+      for (const dupId of duplicateIds) {
+        const questionContext = questionContexts.get(dupId)
+        const prompts = buildQuizPrompts({
+          context: questionContext?.text || '',
+          focusTopics,
+          domain: questionContext?.domain,
+          retrievalObjective: questionContext?.objective,
+          totalQuestions: questionCount,
+          difficultyTarget,
+          batch: {
+            startId: dupId,
+            count: 1,
+            previousQuestions: Array.from(questionsById.values()).map((question) => question.enunciado),
+          },
+          avoidQuestions,
+          examBoard: examBoard as 'GENERIC' | 'CEBRASPE' | 'FGV' | 'FCC' | 'VUNESP' | 'AOCP',
+          answerFormat: answerFormat as 'FOUR_OPTIONS' | 'FIVE_OPTIONS' | 'TRUE_FALSE',
+        })
+        try {
+          const { batch, providerUsed, metrics } = await generateQuizBatchWithFallback(
+            prompts.systemPrompt,
+            prompts.userPrompt,
+            dupId,
+            1,
+            undefined,
+            answerFormat as 'FOUR_OPTIONS' | 'FIVE_OPTIONS' | 'TRUE_FALSE',
+          )
+          collectMetrics(metrics)
+          const question = batch.questoes[0]
+          const sources = questionContext?.sources || []
+          question.sources = sources
+          const normalizedQuestion = normalizeQuestionSourceCitation(question)
+          const qualityIssues = getQuestionQualityIssues(normalizedQuestion)
+          if (qualityIssues.length > 0) {
+            generationMetrics.qualityFailures += 1
+            throw new Error(`INVALID_AI_QUALITY: ${qualityIssues.join('; ')}`)
+          }
+          const groundingIssues = getQuestionGroundingIssues(normalizedQuestion)
+          if (groundingIssues.length > 0) {
+            generationMetrics.groundingFailures += 1
+            throw new Error(`INVALID_AI_GROUNDING: ${groundingIssues.join('; ')}`)
+          }
+          questionsById.set(dupId, normalizedQuestion)
+          providersUsed.add(providerUsed)
+        } catch (error) {
+          collectMetrics(getQuizGenerationMetrics(error))
+          throw new Error(`INVALID_AI_RESPONSE: falha ao regenerar questão duplicada ${dupId}`)
+        }
       }
     }
 
@@ -369,6 +494,14 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
         materials: vectorDocuments.length ? { create: vectorDocuments.map((document) => ({ documentId: document.id, fileName: document.file_name })) } : undefined,
         difficultyTarget: difficultyTarget.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
         ocrUsed,
+        assessmentKind,
+        examBoard,
+        examMode,
+        scoringMode,
+        timeLimitMinutes,
+        pauseAllowed,
+        feedbackMode: examMode || assessmentKind === 'DIAGNOSTIC' ? 'DEFERRED' : 'IMMEDIATE',
+        examNoticeId,
       },
     })
 
@@ -377,7 +510,8 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
       provider: providerUsed,
       status: 'success',
       durationMs: Date.now() - startedAt,
-      metadata: { quizId: saved.id, pageCount, chunks: chunkCount, vectorBatching: vectorDocuments.length > 0, materialCount: vectorDocuments.length, documentIds, materialWeights, questionCount, difficultyTarget, ocrUsed },
+      tokensEstimated: generationMetrics.totalTokens || undefined,
+      metadata: { quizId: saved.id, pageCount, chunks: chunkCount, vectorBatching: vectorDocuments.length > 0, materialCount: vectorDocuments.length, documentIds, materialWeights, questionCount, difficultyTarget, ocrUsed, generationMetrics },
     })
     return NextResponse.json({ success: true, quizId: saved.id })
   } catch (error) {
@@ -385,13 +519,26 @@ async function generateQuizResponse(request: NextRequest, reportProgress?: Progr
     const message = error instanceof Error ? error.message : 'INTERNAL_ERROR'
     console.error('[GERADOR ERROR]', { message, stack: error instanceof Error ? error.stack : undefined, userId: user.id })
     Sentry.captureException(error)
-    await audit({ userId: user.id, status: 'error', durationMs: Date.now() - startedAt, errorMessage: message })
+    await audit({
+      userId: user.id,
+      status: 'error',
+      durationMs: Date.now() - startedAt,
+      tokensEstimated: generationMetrics.totalTokens || undefined,
+      errorMessage: message,
+      metadata: { generationMetrics },
+    })
 
     if (message === 'EMPTY_PDF') return errorResponse('EMPTY_PDF', 'Não conseguimos extrair texto suficiente desse PDF.', 400)
     if (message === 'PDF_PARSE_ERROR') return errorResponse('PDF_PARSE_ERROR', 'O PDF está corrompido ou não pôde ser processado.', 400)
     if (message === 'PDF_TOO_MANY_PAGES') return errorResponse('PDF_TOO_MANY_PAGES', 'O PDF excede o limite de 400 páginas.', 400)
     if (message.startsWith('VECTOR_')) return errorResponse('VECTOR_DOCUMENT_ERROR', 'Não foi possível consultar os trechos processados do PDF.', 503)
-    if (message.startsWith('INVALID_AI_')) return errorResponse('INVALID_AI_RESPONSE', 'A IA retornou um simulado inválido. Tente novamente.', 503)
+    if (message.startsWith('INVALID_AI_')) {
+      if (message.includes('OPENROUTER_OUTPUT_TRUNCATED')) return errorResponse('INVALID_AI_RESPONSE', 'A resposta da IA ficou incompleta mesmo após a repetição automática. Tente reduzir a quantidade de questões.', 503)
+      if (message.includes('INVALID_AI_SCHEMA')) return errorResponse('INVALID_AI_RESPONSE', 'A IA não respeitou o formato da banca selecionada. A repetição automática também falhou; tente novamente.', 503)
+      if (message.includes('INVALID_AI_GROUNDING')) return errorResponse('INVALID_AI_RESPONSE', 'Não foi possível confirmar as questões nos trechos recuperados do material. Tente selecionar um tópico mais específico.', 503)
+      if (message.includes('INVALID_AI_QUALITY')) return errorResponse('INVALID_AI_RESPONSE', 'As questões geradas não atingiram os critérios mínimos de qualidade após as novas tentativas.', 503)
+      return errorResponse('INVALID_AI_RESPONSE', 'A IA retornou um simulado inválido. Tente novamente.', 503)
+    }
     if (/AI_UNAVAILABLE|fetch failed|timeout|HTTP|Empty response/i.test(message)) {
       return errorResponse('AI_UNAVAILABLE', 'Os serviços de IA estão temporariamente indisponíveis. Tente novamente mais tarde.', 503)
     }

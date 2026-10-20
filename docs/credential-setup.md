@@ -18,12 +18,14 @@ Execute `npm run env:prepare`. O comando preserva tudo o que já existe e cria s
 
 1. Crie ou acesse sua loja e ative o Nuvem Pago e a venda por assinatura.
 2. Acesse o [Portal de Parceiros da Nuvemshop](https://partners.nuvemshop.com.br/) e crie um aplicativo para a sua loja.
-3. O identificador do aplicativo preenche `NUVEMSHOP_APP_ID`.
-4. Instale/autorize o aplicativo na loja. O fluxo OAuth devolve `access_token` e `user_id`: use o token em `NUVEMSHOP_ACCESS_TOKEN` e o `user_id` em `NUVEMSHOP_STORE_ID`.
-5. Cadastre os produtos de assinatura. Use os SKUs `AVANCO_PRO_MONTHLY` e `AVANCO_PRO_ANNUAL`, ou copie seus IDs para `NUVEMSHOP_PRO_MONTHLY_PRODUCT_ID` e `NUVEMSHOP_PRO_ANNUAL_PRODUCT_ID`.
+3. Copie o identificador para `NUVEMSHOP_APP_ID` e o segredo da aplicação para `NUVEMSHOP_APP_SECRET`. O segredo é obrigatório em produção para validar `x-linkedstore-hmac-sha256`; ele não é o access token nem o segredo personalizado do webhook.
+4. Instale/autorize o aplicativo na loja. O fluxo OAuth devolve `access_token` e `user_id`: use o token em `NUVEMSHOP_ACCESS_TOKEN` e o `user_id` em `NUVEMSHOP_STORE_ID`. Mantenha `NUVEMSHOP_API_BASE_URL=https://api.nuvemshop.com.br/v1` para lojas brasileiras.
+5. Cadastre os produtos de assinatura. Use os SKUs `AVANCO_PRO_MONTHLY` e `AVANCO_PRO_ANNUAL`, ou configure separadamente os IDs de produto e variante em `NUVEMSHOP_PRO_*_PRODUCT_ID` e `NUVEMSHOP_PRO_*_VARIANT_ID`.
 6. Copie as páginas públicas dos produtos para `NEXT_PUBLIC_NUVEMSHOP_PRO_MONTHLY_URL` e `NEXT_PUBLIC_NUVEMSHOP_PRO_ANNUAL_URL`.
 7. Informe os valores exibidos ao cliente em `NEXT_PUBLIC_PRO_MONTHLY_PRICE` e `NEXT_PUBLIC_PRO_ANNUAL_PRICE`, por exemplo `29,90`.
 8. Com a aplicação em um domínio HTTPS, execute `npm run nuvemshop:webhooks` para registrar o webhook `order/paid`.
+
+O checkout da loja não usa `createPreference` nem `init_point`. `POST /api/billing/checkout` autentica o usuário, aplica idempotência e devolve somente uma das URLs de produto configuradas pelo servidor. A ativação depende do webhook assinado e da releitura do pedido na API.
 
 Documentação oficial: [autenticação OAuth](https://dev.nuvemshop.com.br/docs/erp-guide/authentication), [webhooks](https://dev.nuvemshop.com.br/docs/erp-guide/orders/webhooks) e [assinaturas](https://atendimento.nuvemshop.com.br/pt_BR/venda-por-assinatura/como-vender-produto-por-assinatura-na-nuvemshop).
 

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, Award, BookOpenCheck, Check, CheckCircle2, Clock3, FileText, Loader2, MessageSquareWarning, RefreshCw, Save, X, XCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Award, Bookmark, BookOpenCheck, Check, CheckCircle2, Clock3, FileText, Loader2, MessageSquareWarning, Pause, Play, RefreshCw, Save, X, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import DashboardShell from '@/components/dashboard/DashboardShell';
 import { PerformanceBreakdown } from '@/components/quiz/PerformanceBreakdown';
@@ -16,6 +16,13 @@ interface Simulado {
   pdfNome: string;
   questoesJson: PublicQuestion[];
   createdAt: string;
+  assessmentKind: string;
+  examBoard: string;
+  examMode: boolean;
+  scoringMode: string;
+  timeLimitMinutes: number | null;
+  pauseAllowed: boolean;
+  feedbackMode: string;
 }
 
 export default function SimuladoClient({ simulado, forceRetake = false }: { simulado: Simulado; forceRetake?: boolean }) {
@@ -31,11 +38,16 @@ export default function SimuladoClient({ simulado, forceRetake = false }: { simu
   const [reviewPage, setReviewPage] = useState(1);
   const [saveFailed, setSaveFailed] = useState(false);
   const [durationSeconds, setDurationSeconds] = useState(0);
+  const [resultScore, setResultScore] = useState<number | null>(null);
+  const [resultPercentage, setResultPercentage] = useState<number | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportMessage, setReportMessage] = useState('');
   const [reporting, setReporting] = useState(false);
+  const [markedQuestions, setMarkedQuestions] = useState<number[]>([]);
+  const [paused, setPaused] = useState(false);
   const startedAt = useRef(Date.now());
+  const pausedAt = useRef<number | null>(null);
 
   const question = questions[currentIndex];
   const confirmed = confirmedAnswers[question?.id] !== undefined;
@@ -66,8 +78,11 @@ export default function SimuladoClient({ simulado, forceRetake = false }: { simu
           setSelectedAnswers(data.progress.selectedAnswers || {});
           setConfirmedAnswers(data.progress.respostas || {});
           setEvaluations(data.progress.evaluations || {});
+          setMarkedQuestions(data.progress.markedQuestions || []);
           if (data.progress.completed) {
             setDurationSeconds(data.progress.result?.durationSeconds || 0);
+            setResultScore(data.progress.result?.score ?? null);
+            setResultPercentage(data.progress.result?.percentage ?? null);
             setFinished(true);
           }
         }
@@ -77,10 +92,10 @@ export default function SimuladoClient({ simulado, forceRetake = false }: { simu
   }, [forceRetake, questions.length, simulado.id]);
 
   useEffect(() => {
-    if (loading || finished) return;
+    if (loading || finished || paused) return;
     const timer = setInterval(() => setElapsedSeconds(Math.floor((Date.now() - startedAt.current) / 1000)), 1000);
     return () => clearInterval(timer);
-  }, [finished, loading]);
+  }, [finished, loading, paused]);
 
   const saveProgress = useCallback(async () => {
     if (loading || finished) return;
@@ -88,7 +103,7 @@ export default function SimuladoClient({ simulado, forceRetake = false }: { simu
     try {
       const response = await fetch('/api/tentativa', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ simuladoId: simulado.id, respostas: confirmedAnswers, selectedAnswers, currentIndex, elapsedSeconds: Math.floor((Date.now() - startedAt.current) / 1000), totalQuestoes: questions.length, isFinal: false }),
+        body: JSON.stringify({ simuladoId: simulado.id, respostas: confirmedAnswers, selectedAnswers, currentIndex, elapsedSeconds: Math.floor((Date.now() - startedAt.current) / 1000), totalQuestoes: questions.length, markedQuestions, isFinal: false }),
       });
       if (!response.ok) throw new Error('Falha ao salvar progresso');
       setSaveFailed(false);
@@ -97,7 +112,7 @@ export default function SimuladoClient({ simulado, forceRetake = false }: { simu
     } finally {
       setSaving(false);
     }
-  }, [confirmedAnswers, currentIndex, finished, loading, questions.length, selectedAnswers, simulado.id]);
+  }, [confirmedAnswers, currentIndex, finished, loading, markedQuestions, questions.length, selectedAnswers, simulado.id]);
 
   useEffect(() => {
     if (loading || finished) return;
@@ -108,6 +123,11 @@ export default function SimuladoClient({ simulado, forceRetake = false }: { simu
   const confirmAnswer = async () => {
     const answer = selectedAnswers[question.id];
     if (!answer) return;
+    if (simulado.feedbackMode === 'DEFERRED') {
+      setConfirmedAnswers((current) => ({ ...current, [question.id]: answer }));
+      if (currentIndex < questions.length - 1) setCurrentIndex((index) => index + 1);
+      return;
+    }
     setSaving(true);
     try {
       const response = await fetch('/api/resposta', {
@@ -125,7 +145,7 @@ export default function SimuladoClient({ simulado, forceRetake = false }: { simu
     }
   };
 
-  const finishQuiz = async () => {
+  const finishQuiz = useCallback(async () => {
     setSaving(true);
     try {
       const response = await fetch('/api/tentativa', {
@@ -136,12 +156,18 @@ export default function SimuladoClient({ simulado, forceRetake = false }: { simu
           selectedAnswers,
           elapsedSeconds,
           totalQuestoes: questions.length,
+          markedQuestions,
           isFinal: true,
         }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Falha ao finalizar');
       setDurationSeconds(data.durationSeconds || elapsedSeconds);
+      setResultScore(data.pontuacao ?? null);
+      setResultPercentage(data.percentual ?? null);
+      const progressResponse = await fetch(`/api/tentativa?simuladoId=${simulado.id}`);
+      const progressData = await progressResponse.json().catch(() => ({}));
+      if (progressData.progress?.evaluations) setEvaluations(progressData.progress.evaluations);
       setFinished(true);
       toast.success('Simulado concluído!');
     } catch (error) {
@@ -149,7 +175,26 @@ export default function SimuladoClient({ simulado, forceRetake = false }: { simu
     } finally {
       setSaving(false);
     }
+  }, [confirmedAnswers, elapsedSeconds, markedQuestions, questions.length, selectedAnswers, simulado.id]);
+
+  const togglePause = () => {
+    if (!simulado.pauseAllowed) return;
+    if (paused) {
+      if (pausedAt.current) startedAt.current += Date.now() - pausedAt.current;
+      pausedAt.current = null;
+      setPaused(false);
+    } else {
+      pausedAt.current = Date.now();
+      setPaused(true);
+      saveProgress();
+    }
   };
+
+  useEffect(() => {
+    if (!finished && !saving && simulado.timeLimitMinutes && elapsedSeconds >= simulado.timeLimitMinutes * 60) {
+      void finishQuiz();
+    }
+  }, [elapsedSeconds, finishQuiz, finished, saving, simulado.timeLimitMinutes]);
 
   const reportQuestion = async () => {
     if (reportMessage.trim().length < 3) return toast.error('Descreva o problema com a questão.');
@@ -176,7 +221,9 @@ export default function SimuladoClient({ simulado, forceRetake = false }: { simu
   if (!question) return <DashboardShell focusMode><div className="p-10 text-center">Este simulado não possui questões válidas.</div></DashboardShell>;
 
   if (finished) {
-    const percentage = objectiveCount ? Math.round((score / objectiveCount) * 100) : 0;
+    const percentage = resultPercentage === null ? (objectiveCount ? Math.round((score / objectiveCount) * 100) : 0) : Math.round(resultPercentage);
+    const chartPercentage = Math.max(0, Math.min(100, percentage));
+    const displayedScore = resultScore ?? score;
     const incorrect = objectiveCount - score;
     const minutes = Math.max(1, Math.round((durationSeconds || elapsedSeconds) / 60));
     const fallbackTheme = simulado.temasFoco?.split(',')[0]?.trim() || simulado.titulo;
@@ -187,7 +234,7 @@ export default function SimuladoClient({ simulado, forceRetake = false }: { simu
           <section className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-10 shadow-sm text-center relative overflow-hidden">
             <Award className="w-16 h-16 text-[#b77900] mx-auto" /><h1 className="text-3xl sm:text-4xl font-black mt-3">Simulado concluído!</h1><p className="text-slate-600 mt-2">{performanceMessage} Você finalizou {simulado.titulo}.</p>
             <div className="grid md:grid-cols-[300px_1fr] gap-6 mt-9 text-left">
-              <div className="rounded-3xl bg-slate-50 flex flex-col items-center justify-center p-7"><div className="w-48 h-48 rounded-full flex items-center justify-center" style={{ background: `conic-gradient(#08b76c ${percentage * 3.6}deg, #e5eaf2 0deg)` }}><div className="w-36 h-36 bg-white rounded-full flex flex-col items-center justify-center"><span className="text-5xl font-black">{percentage}%</span><span className="text-xs text-slate-500 font-bold uppercase">de acertos</span></div></div><p className="font-black text-2xl mt-5">{score} de {objectiveCount}</p><p className="text-sm text-slate-500">questões objetivas</p></div>
+              <div className="rounded-3xl bg-slate-50 flex flex-col items-center justify-center p-7"><div className="w-48 h-48 rounded-full flex items-center justify-center" style={{ background: `conic-gradient(#08b76c ${chartPercentage * 3.6}deg, #e5eaf2 0deg)` }}><div className="w-36 h-36 bg-white rounded-full flex flex-col items-center justify-center"><span className="text-5xl font-black">{percentage}%</span><span className="text-xs text-slate-500 font-bold uppercase">pontuação</span></div></div><p className="font-black text-2xl mt-5">{displayedScore} de {objectiveCount}</p><p className="text-sm text-slate-500">{simulado.scoringMode === 'NEGATIVE_ONE' ? '1 ponto perdido por erro' : 'questões objetivas'}</p></div>
               <div className="grid sm:grid-cols-2 gap-4">{[
                 [CheckCircle2,score,'Questões corretas','bg-emerald-50 text-emerald-600'],
                 [XCircle,incorrect,'Questões incorretas','bg-red-50 text-red-500'],
@@ -197,6 +244,7 @@ export default function SimuladoClient({ simulado, forceRetake = false }: { simu
             </div>
             <div className="flex flex-wrap justify-center gap-3 mt-7"><button onClick={() => { setReviewing((value) => !value); setReviewPage(1); }} className="px-6 py-3 rounded-xl avanco-navy text-white font-bold">{reviewing ? 'Ocultar revisão' : 'Revisar questões'}</button><Link href={`/dashboard/simulado/${simulado.id}?retake=1`} className="px-6 py-3 rounded-xl border border-slate-300 font-bold flex items-center gap-2"><RefreshCw className="w-4 h-4" /> Refazer simulado</Link><Link href="/dashboard" className="px-6 py-3 rounded-xl border border-slate-300 font-bold">Voltar ao dashboard</Link></div>
           </section>
+          {simulado.assessmentKind === 'DIAGNOSTIC' && <section className="mt-6 rounded-3xl border border-blue-200 bg-blue-50 p-6 sm:p-8"><p className="text-xs font-black uppercase tracking-[0.16em] text-blue-700">Diagnóstico personalizado</p><h2 className="mt-2 text-2xl font-black">Seu ponto de partida</h2><div className="mt-5 grid gap-4 sm:grid-cols-3"><div className="rounded-2xl bg-white p-5"><p className="text-sm text-slate-500">Nível recomendado</p><p className="mt-1 text-xl font-black">{percentage >= 80 ? 'Avançado' : percentage >= 55 ? 'Médio' : 'Fácil'}</p></div><div className="rounded-2xl bg-white p-5"><p className="text-sm text-slate-500">Carga diária inicial</p><p className="mt-1 text-xl font-black">{percentage >= 80 ? 30 : percentage >= 55 ? 45 : 60} minutos</p></div><div className="rounded-2xl bg-white p-5"><p className="text-sm text-slate-500">Prioridade</p><p className="mt-1 text-xl font-black">{incorrect > Math.floor(objectiveCount / 2) ? 'Reforçar fundamentos' : incorrect ? 'Corrigir lacunas' : 'Manter domínio'}</p></div></div><p className="mt-5 text-sm text-slate-700">O resultado passa a compor o mapa de desempenho e influencia as próximas tarefas do plano de estudos.</p><Link href="/dashboard/planos" className="mt-4 inline-flex items-center gap-2 font-black text-blue-800">Abrir plano atualizado <ArrowRight className="h-4 w-4" /></Link></section>}
           <PerformanceBreakdown questions={questions} evaluations={evaluations} fallbackTheme={fallbackTheme} />
           {reviewing && <section className="mt-6 space-y-4">{visibleReviewQuestions.map((item) => { const answer = selectedAnswers[item.id]; const evaluation = evaluations[item.id]; const correct = evaluation?.correct === true; return <article key={item.id} className="bg-white border border-slate-200 rounded-2xl p-6"><div className="flex items-start gap-3"><span className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center ${item.tipo === 'discursiva' ? 'bg-amber-100 text-amber-700' : correct ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>{item.tipo === 'discursiva' ? <FileText className="w-4 h-4" /> : correct ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}</span><div className="min-w-0 flex-1"><h3 className="font-black">Questão {item.id}</h3><p className="mt-2">{item.enunciado}</p><p className="text-sm mt-4"><strong>Sua resposta:</strong> {answer || 'Não respondida'}</p><p className="text-sm mt-1 text-emerald-700"><strong>Resposta esperada:</strong> {evaluation?.correctAnswer || 'Disponível após responder'}</p><p className="text-sm text-slate-600 mt-3 bg-slate-50 p-3 rounded-xl"><strong>Justificativa:</strong> {evaluation?.justification || 'Disponível após responder'}</p><SourceEvidence sources={evaluation?.sources} /></div></div></article>})}{reviewPageCount > 1 && <div className="flex items-center justify-center gap-3 pt-2"><button type="button" onClick={() => setReviewPage((page) => Math.max(1, page - 1))} disabled={reviewPage === 1} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold disabled:opacity-40"><ArrowLeft className="h-4 w-4" /> Anterior</button><span className="text-sm font-bold text-slate-600">Página {reviewPage} de {reviewPageCount}</span><button type="button" onClick={() => setReviewPage((page) => Math.min(reviewPageCount, page + 1))} disabled={reviewPage === reviewPageCount} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold disabled:opacity-40">Próxima <ArrowRight className="h-4 w-4" /></button></div>}</section>}
         </div>
@@ -215,7 +263,8 @@ export default function SimuladoClient({ simulado, forceRetake = false }: { simu
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
               <span className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold ${saveFailed ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}{saveFailed ? 'Falha ao salvar' : saving ? 'Salvando...' : 'Progresso salvo'}</span>
-              <span className="inline-flex items-center gap-2 rounded-xl bg-[#071d49] px-3 py-2 text-sm font-black text-white"><Clock3 className="h-4 w-4 text-[#ffc400]" />{formatElapsedTime(elapsedSeconds)}</span>
+              {simulado.pauseAllowed && <button type="button" onClick={togglePause} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-black">{paused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}{paused ? 'Continuar' : 'Pausar'}</button>}
+              <span className="inline-flex items-center gap-2 rounded-xl bg-[#071d49] px-3 py-2 text-sm font-black text-white"><Clock3 className="h-4 w-4 text-[#ffc400]" />{formatElapsedTime(simulado.timeLimitMinutes ? Math.max(0, simulado.timeLimitMinutes * 60 - elapsedSeconds) : elapsedSeconds)}</span>
             </div>
           </div>
           <div className="px-5 py-4 sm:px-7">
@@ -227,18 +276,18 @@ export default function SimuladoClient({ simulado, forceRetake = false }: { simu
         <div className="mt-6 grid items-start gap-6 lg:grid-cols-[224px_minmax(0,1fr)]">
           <aside className="hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:block lg:sticky lg:top-24">
             <div className="flex items-center justify-between"><div><h2 className="font-black">Mapa da prova</h2><p className="mt-1 text-xs text-slate-500">{Object.keys(confirmedAnswers).length} respondidas</p></div><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 font-black text-blue-700">{questions.length}</span></div>
-            <QuestionNavigator questions={questions} currentIndex={currentIndex} confirmedAnswers={confirmedAnswers} onSelect={setCurrentIndex} vertical />
-            <div className="mt-5 grid gap-2 border-t border-slate-100 pt-4 text-xs font-semibold text-slate-500"><span className="flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-blue-700" /> Questão atual</span><span className="flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Respondida</span></div>
+            <QuestionNavigator questions={questions} currentIndex={currentIndex} confirmedAnswers={confirmedAnswers} markedQuestions={markedQuestions} freeNavigation={simulado.examMode} onSelect={setCurrentIndex} vertical />
+            <div className="mt-5 grid gap-2 border-t border-slate-100 pt-4 text-xs font-semibold text-slate-500"><span className="flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-blue-700" /> Questão atual</span><span className="flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-emerald-500" /> Respondida</span><span className="flex items-center gap-2"><Bookmark className="h-3 w-3 text-amber-600" /> Marcada para revisar</span></div>
           </aside>
           <main className="min-w-0">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:hidden"><div className="flex items-center justify-between"><div><p className="font-black">Questões</p><p className="text-xs text-slate-500">Selecione uma questão disponível</p></div><span className="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700">{Object.keys(confirmedAnswers).length}/{questions.length}</span></div><QuestionNavigator questions={questions} currentIndex={currentIndex} confirmedAnswers={confirmedAnswers} onSelect={setCurrentIndex} vertical /></div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:hidden"><div className="flex items-center justify-between"><div><p className="font-black">Questões</p><p className="text-xs text-slate-500">Selecione uma questão disponível</p></div><span className="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700">{Object.keys(confirmedAnswers).length}/{questions.length}</span></div><QuestionNavigator questions={questions} currentIndex={currentIndex} confirmedAnswers={confirmedAnswers} markedQuestions={markedQuestions} freeNavigation={simulado.examMode} onSelect={setCurrentIndex} vertical /></div>
 
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_12px_40px_rgba(15,45,95,0.07)] sm:p-8 lg:p-10">
-          <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex flex-wrap gap-2"><span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black capitalize text-blue-700">{question.tipo.replaceAll('_', ' ')}</span><span className="rounded-full bg-amber-50 px-3 py-1.5 text-xs font-black text-amber-700">{question.dificuldade}</span></div><span className="text-xs font-bold uppercase tracking-wider text-slate-400">Questão {question.id}</span></div>
+          <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex flex-wrap gap-2"><span className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black capitalize text-blue-700">{question.tipo.replaceAll('_', ' ')}</span><span className="rounded-full bg-amber-50 px-3 py-1.5 text-xs font-black text-amber-700">{question.dificuldade}</span>{simulado.examBoard !== 'GENERIC' && <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black">{simulado.examBoard}</span>}</div><button type="button" onClick={() => setMarkedQuestions((current) => current.includes(question.id) ? current.filter((id) => id !== question.id) : [...current, question.id])} className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-black ${markedQuestions.includes(question.id) ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-600'}`}><Bookmark className="h-4 w-4" fill={markedQuestions.includes(question.id) ? 'currentColor' : 'none'} /> Revisar</button></div>
           <h2 className="mt-5 max-w-4xl text-xl font-black leading-snug sm:text-2xl lg:text-[1.7rem]">{question.enunciado}</h2>
-          {question.tipo === 'discursiva' ? <textarea value={selectedAnswers[question.id] || ''} onChange={(event) => setSelectedAnswers((current) => ({ ...current, [question.id]: event.target.value }))} disabled={confirmed} rows={7} placeholder="Escreva sua resposta..." className="w-full mt-6 border border-slate-300 rounded-2xl p-4 focus:ring-2 focus:ring-blue-600 outline-none disabled:bg-slate-50" /> : <div className="space-y-3 mt-7">{question.opcoes.map((option) => { const selected = selectedAnswers[question.id] === option; const correctOption = confirmed && option === evaluations[question.id]?.correctAnswer; const wrong = confirmed && selected && !correctOption; return <button key={option} onClick={() => !confirmed && setSelectedAnswers((current) => ({ ...current, [question.id]: option }))} disabled={confirmed} className={`w-full rounded-xl border-2 p-4 text-left font-medium transition-all flex items-center gap-4 ${correctOption ? 'border-emerald-500 bg-emerald-50' : wrong ? 'border-red-400 bg-red-50' : selected ? 'border-blue-600 bg-blue-50 text-blue-800' : 'border-slate-200 hover:border-blue-300'}`}><span className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 font-black text-sm ${selected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}>{option.charAt(0)}</span>{option.replace(/^[A-D]\)\s*/, '')}</button>})}</div>}
+          {paused ? <div className="mt-7 rounded-2xl bg-slate-100 p-10 text-center"><Pause className="mx-auto h-8 w-8 text-slate-500" /><p className="mt-3 font-black">Prova pausada</p><p className="text-sm text-slate-500">O cronômetro está parado.</p></div> : question.tipo === 'discursiva' ? <textarea value={selectedAnswers[question.id] || ''} onChange={(event) => { const answer = event.target.value; setSelectedAnswers((current) => ({ ...current, [question.id]: answer })); if (simulado.feedbackMode === 'DEFERRED' && confirmed) setConfirmedAnswers((current) => ({ ...current, [question.id]: answer })); }} disabled={confirmed && simulado.feedbackMode !== 'DEFERRED'} rows={7} placeholder="Escreva sua resposta..." className="w-full mt-6 border border-slate-300 rounded-2xl p-4 focus:ring-2 focus:ring-blue-600 outline-none disabled:bg-slate-50" /> : <div className="space-y-3 mt-7">{question.opcoes.map((option) => { const selected = selectedAnswers[question.id] === option; const correctOption = confirmed && simulado.feedbackMode !== 'DEFERRED' && option === evaluations[question.id]?.correctAnswer; const wrong = confirmed && simulado.feedbackMode !== 'DEFERRED' && selected && !correctOption; const locked = confirmed && simulado.feedbackMode !== 'DEFERRED'; return <button key={option} onClick={() => { if (locked) return; setSelectedAnswers((current) => ({ ...current, [question.id]: option })); if (simulado.feedbackMode === 'DEFERRED' && confirmed) setConfirmedAnswers((current) => ({ ...current, [question.id]: option })); }} disabled={locked} className={`w-full rounded-xl border-2 p-4 text-left font-medium transition-all flex items-center gap-4 ${correctOption ? 'border-emerald-500 bg-emerald-50' : wrong ? 'border-red-400 bg-red-50' : selected ? 'border-blue-600 bg-blue-50 text-blue-800' : 'border-slate-200 hover:border-blue-300'}`}><span className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 font-black text-sm ${selected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}>{option.charAt(0)}</span>{question.tipo === 'certo_errado' ? option : option.replace(/^[A-E]\)\s*/, '')}</button>})}</div>}
 
-          {confirmed && <><div className={`mt-7 rounded-2xl border p-5 ${question.tipo === 'discursiva' ? 'bg-blue-50 border-blue-200' : evaluations[question.id]?.correct ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}><h3 className="font-black text-lg">{question.tipo === 'discursiva' ? 'Compare sua resposta' : evaluations[question.id]?.correct ? 'Correto!' : 'Resposta incorreta'}</h3><p className="mt-3 text-sm"><strong>Resposta esperada:</strong> {evaluations[question.id]?.correctAnswer}</p><p className="mt-3 text-sm leading-relaxed"><strong>Justificativa:</strong> {evaluations[question.id]?.justification}</p><SourceEvidence sources={evaluations[question.id]?.sources} /></div><div className="mt-4"><button type="button" onClick={() => setReportOpen((open) => !open)} className="inline-flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-blue-700"><MessageSquareWarning className="w-4 h-4" /> Reportar problema nesta questão</button>{reportOpen && <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4"><label htmlFor="question-report" className="text-sm font-bold">O que precisa ser corrigido?</label><textarea id="question-report" value={reportMessage} onChange={(event) => setReportMessage(event.target.value.slice(0, 1000))} rows={3} className="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3 outline-none focus:ring-2 focus:ring-blue-600" placeholder="Ex.: a resposta não está no documento ou a justificativa ficou confusa." /><div className="mt-2 flex justify-end gap-2"><button type="button" onClick={() => setReportOpen(false)} className="px-4 py-2 text-sm font-bold text-slate-700">Cancelar</button><button type="button" onClick={reportQuestion} disabled={reporting || reportMessage.trim().length < 3} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-60">{reporting ? 'Enviando...' : 'Enviar feedback'}</button></div></div>}</div></>}
+          {confirmed && simulado.feedbackMode !== 'DEFERRED' && <><div className={`mt-7 rounded-2xl border p-5 ${question.tipo === 'discursiva' ? 'bg-blue-50 border-blue-200' : evaluations[question.id]?.correct ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}><h3 className="font-black text-lg">{question.tipo === 'discursiva' ? 'Compare sua resposta' : evaluations[question.id]?.correct ? 'Correto!' : 'Resposta incorreta'}</h3><p className="mt-3 text-sm"><strong>Resposta esperada:</strong> {evaluations[question.id]?.correctAnswer}</p><p className="mt-3 text-sm leading-relaxed"><strong>Justificativa:</strong> {evaluations[question.id]?.justification}</p><SourceEvidence sources={evaluations[question.id]?.sources} /></div><div className="mt-4"><button type="button" onClick={() => setReportOpen((open) => !open)} className="inline-flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-blue-700"><MessageSquareWarning className="w-4 h-4" /> Reportar problema nesta questão</button>{reportOpen && <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4"><label htmlFor="question-report" className="text-sm font-bold">O que precisa ser corrigido?</label><textarea id="question-report" value={reportMessage} onChange={(event) => setReportMessage(event.target.value.slice(0, 1000))} rows={3} className="mt-2 w-full rounded-xl border border-slate-300 bg-white p-3 outline-none focus:ring-2 focus:ring-blue-600" placeholder="Ex.: a resposta não está no documento ou a justificativa ficou confusa." /><div className="mt-2 flex justify-end gap-2"><button type="button" onClick={() => setReportOpen(false)} className="px-4 py-2 text-sm font-bold text-slate-700">Cancelar</button><button type="button" onClick={reportQuestion} disabled={reporting || reportMessage.trim().length < 3} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-60">{reporting ? 'Enviando...' : 'Enviar feedback'}</button></div></div>}</div></>}
 
           <div className="mt-8 flex flex-col-reverse justify-between gap-3 border-t border-slate-100 pt-6 sm:flex-row"><button onClick={() => setCurrentIndex((index) => Math.max(0, index - 1))} disabled={currentIndex === 0} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-5 py-3 font-bold transition-colors hover:bg-slate-50 disabled:opacity-40"><ArrowLeft className="h-4 w-4" /> Anterior</button>{!confirmed ? <button onClick={confirmAnswer} disabled={!selectedAnswers[question.id]} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-7 py-3 font-black text-white shadow-lg shadow-blue-700/20 transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-40">Confirmar resposta <ArrowRight className="h-4 w-4" /></button> : currentIndex < questions.length - 1 ? <button onClick={() => setCurrentIndex((index) => index + 1)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-7 py-3 font-black text-white shadow-lg shadow-blue-700/20">Próxima questão <ArrowRight className="h-4 w-4" /></button> : <button onClick={finishQuiz} disabled={saving} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#ffc400] px-7 py-3 font-black text-[#06183d] shadow-lg shadow-amber-300/30">Finalizar simulado <Award className="h-5 w-5" /></button>}</div>
         </section>
@@ -266,7 +315,7 @@ function SourceEvidence({ sources }: { sources?: QuestionEvaluation['sources'] }
   return <details className="mt-4 rounded-xl border border-blue-200 bg-white/70 p-4"><summary className="cursor-pointer list-none font-bold text-sm text-blue-900 flex items-center gap-2"><BookOpenCheck className="w-4 h-4" /> Comprovação • {strongest.documentName ? `${strongest.documentName} · ` : ''}{pages.length === 1 ? 'página' : 'páginas'} {pages.join(', ')}</summary><div className="mt-3 text-sm text-slate-700"><p className="leading-relaxed">“{strongest.excerpt}”</p><p className="mt-2 text-xs text-slate-500">Chunk {strongest.chunkId} • similaridade {(strongest.similarity * 100).toFixed(1)}%</p></div></details>;
 }
 
-function QuestionNavigator({ questions, currentIndex, confirmedAnswers, onSelect, vertical = false }: { questions: PublicQuestion[]; currentIndex: number; confirmedAnswers: Record<number, string>; onSelect: (index: number) => void; vertical?: boolean }) {
+function QuestionNavigator({ questions, currentIndex, confirmedAnswers, markedQuestions, freeNavigation, onSelect, vertical = false }: { questions: PublicQuestion[]; currentIndex: number; confirmedAnswers: Record<number, string>; markedQuestions: number[]; freeNavigation: boolean; onSelect: (index: number) => void; vertical?: boolean }) {
   const answeredCount = Object.keys(confirmedAnswers).length;
-  return <nav className={vertical ? 'dashboard-scrollbar mt-5 grid max-h-64 grid-cols-5 gap-2 overflow-y-auto pr-1' : 'flex min-w-max gap-2'} aria-label="Navegação das questões">{questions.map((item, index) => { const answered = confirmedAnswers[item.id] !== undefined; const accessible = index <= answeredCount; return <button key={item.id} type="button" disabled={!accessible} onClick={() => onSelect(index)} aria-current={index === currentIndex ? 'step' : undefined} aria-label={`Ir para questão ${item.id}${answered ? ', respondida' : ''}`} className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-black text-slate-600 transition-all hover:border-blue-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-35 data-[current=true]:scale-105 data-[current=true]:border-blue-700 data-[current=true]:bg-blue-700 data-[current=true]:text-white" data-current={index === currentIndex}>{item.id}{answered && index !== currentIndex && <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white ring-2 ring-white"><Check className="h-2.5 w-2.5" /></span>}</button>})}</nav>;
+  return <nav className={vertical ? 'dashboard-scrollbar mt-5 grid max-h-64 grid-cols-5 gap-2 overflow-y-auto pr-1' : 'flex min-w-max gap-2'} aria-label="Navegação das questões">{questions.map((item, index) => { const answered = confirmedAnswers[item.id] !== undefined; const accessible = freeNavigation || index <= answeredCount; const marked = markedQuestions.includes(item.id); return <button key={item.id} type="button" disabled={!accessible} onClick={() => onSelect(index)} aria-current={index === currentIndex ? 'step' : undefined} aria-label={`Ir para questão ${item.id}${answered ? ', respondida' : ''}${marked ? ', marcada para revisar' : ''}`} className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-xs font-black text-slate-600 transition-all hover:border-blue-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-35 data-[current=true]:scale-105 data-[current=true]:border-blue-700 data-[current=true]:bg-blue-700 data-[current=true]:text-white" data-current={index === currentIndex}>{item.id}{marked && <Bookmark className="absolute -left-1 -top-1 h-3.5 w-3.5 text-amber-600" fill="currentColor" />}{answered && index !== currentIndex && <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white ring-2 ring-white"><Check className="h-2.5 w-2.5" /></span>}</button>})}</nav>;
 }

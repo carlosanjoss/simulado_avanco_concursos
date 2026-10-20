@@ -42,6 +42,9 @@ export default async function DashboardPage() {
   })
 
   const [usage, access] = await Promise.all([getMonthlyUsage(user.id, user.email), getUserPlanAccess(user)])
+  const dueReviews = access.reviewNotebook
+    ? await prisma.reviewCard.count({ where: { userId: user.id, masteredAt: null, dueAt: { lte: new Date() } } })
+    : 0
   const average = completedAttempts.length
     ? Math.round(completedAttempts.reduce((sum, attempt) => sum + attempt.percentual, 0) / completedAttempts.length)
     : 0
@@ -69,6 +72,7 @@ export default async function DashboardPage() {
         unlimited: usage.unlimited,
         limit: usage.limit,
         isPro: access.planCode === 'PRO',
+        dueReviews,
       }}
     />
   )

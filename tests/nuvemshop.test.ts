@@ -1,7 +1,17 @@
+import { createHmac } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { nextSubscriptionPeriodEnd, normalizeNuvemshopOrder } from '@/lib/nuvemshop'
+import {
+  fetchNuvemshopOrder,
+  getNuvemshopOrderDisposition,
+  nextSubscriptionPeriodEnd,
+  normalizeNuvemshopOrder,
+  verifyNuvemshopWebhookSignature,
+} from '@/lib/nuvemshop'
 
-afterEach(() => vi.unstubAllEnvs())
+afterEach(() => {
+  vi.unstubAllEnvs()
+  vi.unstubAllGlobals()
+})
 
 describe('Nuvemshop billing integration', () => {
   it('matches a monthly Pro order by the documented SKU', () => {
@@ -22,9 +32,69 @@ describe('Nuvemshop billing integration', () => {
     expect(order.plan?.billingInterval).toBe('ANNUAL')
   })
 
+  it('matches the configured Nuvemshop product variants used by the checkouts', () => {
+    vi.stubEnv('NUVEMSHOP_PRO_MONTHLY_VARIANT_ID', '1620509884')
+    vi.stubEnv('NUVEMSHOP_PRO_ANNUAL_VARIANT_ID', '1620512017')
+
+    const monthly = normalizeNuvemshopOrder({
+      id: 'monthly-order',
+      payment_status: 'paid',
+      products: [{ product_id: 374674435, variant_id: 1620509884 }],
+    })
+    const annual = normalizeNuvemshopOrder({
+      id: 'annual-order',
+      payment_status: 'paid',
+      products: [{ product_id: 374675033, variant_id: 1620512017 }],
+    })
+
+    expect(monthly.plan?.billingInterval).toBe('MONTHLY')
+    expect(annual.plan?.billingInterval).toBe('ANNUAL')
+  })
+
   it('extends from the existing period instead of losing paid days', () => {
     const paidAt = new Date('2026-10-08T12:00:00Z')
     const currentEnd = new Date('2026-10-20T12:00:00Z')
     expect(nextSubscriptionPeriodEnd('MONTHLY', currentEnd, paidAt).toISOString()).toBe('2026-11-20T12:00:00.000Z')
+  })
+
+  it('fetches orders from the Brazilian Nuvemshop API endpoint', async () => {
+    vi.stubEnv('NUVEMSHOP_STORE_ID', '4377151')
+    vi.stubEnv('NUVEMSHOP_ACCESS_TOKEN', 'test-token')
+    vi.stubEnv('NEXT_PUBLIC_SUPPORT_EMAIL', 'suporte@example.com')
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      id: 99,
+      payment_status: 'paid',
+      products: [],
+    }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchNuvemshopOrder('99')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.nuvemshop.com.br/v1/4377151/orders/99',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer test-token',
+          'User-Agent': 'Avanco Simulados (suporte@example.com)',
+        }),
+      }),
+    )
+  })
+
+  it('validates the official HMAC against the untouched raw body', () => {
+    vi.stubEnv('NUVEMSHOP_APP_SECRET', 'app-secret-for-test')
+    const body = JSON.stringify({ store_id: 4377151, event: 'order/paid', id: 99 })
+    const signature = createHmac('sha256', 'app-secret-for-test').update(body, 'utf8').digest('hex')
+
+    expect(verifyNuvemshopWebhookSignature(body, signature)).toBe(true)
+    expect(verifyNuvemshopWebhookSignature(`${body} `, signature)).toBe(false)
+    expect(verifyNuvemshopWebhookSignature(body, 'invalid')).toBe(false)
+  })
+
+  it('classifies paid, cancelled and refunded orders without trusting the webhook event', () => {
+    expect(getNuvemshopOrderDisposition({ orderStatus: 'open', paymentStatus: 'paid' })).toBe('ACTIVE')
+    expect(getNuvemshopOrderDisposition({ orderStatus: 'cancelled', paymentStatus: 'paid' })).toBe('CANCELED')
+    expect(getNuvemshopOrderDisposition({ orderStatus: 'closed', paymentStatus: 'refunded' })).toBe('REVOKED')
+    expect(getNuvemshopOrderDisposition({ orderStatus: 'open', paymentStatus: 'pending' })).toBe('PENDING')
   })
 })

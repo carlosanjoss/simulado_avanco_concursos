@@ -22,6 +22,9 @@ export interface PlanEntitlements {
   studyPlan: boolean
   reviewNotebook: boolean
   fullQuestionBank: boolean
+  examNotice: boolean
+  personalizedDiagnostic: boolean
+  examBoardModes: boolean
 }
 
 export function getPlanMonthlyQuizLimit(planCode?: string | null): number {
@@ -42,6 +45,9 @@ export function getPlanEntitlements(planCode?: string | null): PlanEntitlements 
     studyPlan: isPro,
     reviewNotebook: isPro,
     fullQuestionBank: isPro,
+    examNotice: isPro,
+    personalizedDiagnostic: isPro,
+    examBoardModes: isPro,
   }
 }
 

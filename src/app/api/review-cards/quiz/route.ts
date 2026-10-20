@@ -9,7 +9,14 @@ import { getUserPlanAccess } from '@/lib/plan-access'
 
 export const dynamic = 'force-dynamic'
 
-const requestSchema = z.object({ limit: z.union([z.literal(5), z.literal(10), z.literal(20)]).default(10) }).strict()
+const requestSchema = z.object({
+  limit: z.union([z.literal(5), z.literal(10), z.literal(20)]).default(10),
+  theme: z.string().trim().min(1).max(160).optional(),
+  difficulty: z.enum(['Fácil', 'Médio', 'Avançado']).optional(),
+  errorType: z.enum(['CONTENT', 'ATTENTION', 'DOUBT']).optional(),
+  favoritesOnly: z.boolean().default(false),
+  dueOnly: z.boolean().default(false),
+}).strict()
 
 export async function POST(request: NextRequest) {
   const user = await getAuthenticatedUser(request)
@@ -20,20 +27,28 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: 'Quantidade de questões inválida' }, { status: 400 })
 
   const cards = await prisma.reviewCard.findMany({
-    where: { userId: user.id, masteredAt: null },
+    where: {
+      userId: user.id,
+      masteredAt: null,
+      ...(parsed.data.errorType ? { errorType: parsed.data.errorType } : {}),
+      ...(parsed.data.favoritesOnly ? { favorite: true } : {}),
+      ...(parsed.data.dueOnly ? { dueAt: { lte: new Date() } } : {}),
+    },
     orderBy: [{ dueAt: 'asc' }, { repetitions: 'asc' }, { updatedAt: 'asc' }],
-    take: parsed.data.limit,
+    take: 300,
   })
 
-  const questions = cards.flatMap((card, index) => {
+  const questions = cards.flatMap((card) => {
     try {
       const question = questionSchema.safeParse(JSON.parse(card.questionJson))
       if (!question.success) return []
-      return [{ ...question.data, id: index + 1, reviewCardId: card.id } satisfies Question]
+      if (parsed.data.theme && question.data.tema !== parsed.data.theme) return []
+      if (parsed.data.difficulty && question.data.dificuldade !== parsed.data.difficulty) return []
+      return [{ ...question.data, reviewCardId: card.id } satisfies Question]
     } catch {
       return []
     }
-  }).map((question, index) => ({ ...question, id: index + 1 }))
+  }).slice(0, parsed.data.limit).map((question, index) => ({ ...question, id: index + 1 }))
 
   if (!questions.length) {
     return NextResponse.json({ error: 'Não há questões pendentes válidas no caderno de erros.' }, { status: 409 })

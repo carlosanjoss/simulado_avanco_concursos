@@ -59,8 +59,19 @@ export interface AIProvider {
   generate(
     systemPrompt: string,
     userPrompt: string,
-    request?: { questionId: number; attempt: number },
-  ): Promise<string>;
+    request?: { startId: number; count?: number; attempt: number; answerFormat?: 'FOUR_OPTIONS' | 'FIVE_OPTIONS' | 'TRUE_FALSE' },
+  ): Promise<string | AIProviderResponse>;
+}
+
+export interface AIProviderUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+export interface AIProviderResponse {
+  content: string;
+  usage?: Partial<AIProviderUsage>;
 }
 
 export interface AIProviderStatus {

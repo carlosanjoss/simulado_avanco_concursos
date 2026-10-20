@@ -20,6 +20,7 @@ const publicRoutes = [
   '/api/auth/resend-verification',
   '/api/auth/signout',
   '/api/auth/me',
+  '/api/billing/checkout',
   '/api/health',
   '/api/webhooks/nuvemshop',
   '/pdf.worker.min.mjs',

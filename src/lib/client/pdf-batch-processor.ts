@@ -1,3 +1,5 @@
+import { averageOcrConfidence, normalizeOcrConfidence, shouldUseOcrForPage, type OcrLanguage } from '@/lib/ocr';
+
 const PAGE_BATCH_SIZE = 5;
 const MAX_PDF_PAGES = 400;
 const REQUEST_ATTEMPTS = 3;
@@ -9,6 +11,8 @@ export interface PdfProcessingProgress {
   currentBatch: number;
   totalBatches: number;
   message: string;
+  ocrConfidence?: number;
+  ocrReason?: 'empty' | 'partial';
 }
 
 interface PdfTextItem {
@@ -53,8 +57,8 @@ export async function cleanupPdfProcessing(documentId: string): Promise<void> {
 export async function processPdfInBrowser(
   file: File,
   onProgress: (progress: PdfProcessingProgress) => void,
-  options: { allowOcr?: boolean } = {},
-): Promise<{ documentId: string; totalPages: number; chunkCount: number; ocrPages: number }> {
+  options: { allowOcr?: boolean; ocrLanguage?: OcrLanguage; reviewOcrPage?: (page: { pageNumber: number; text: string; confidence: number; reason: 'empty' | 'partial' }) => Promise<{ text: string; reviewed: boolean }> } = {},
+): Promise<{ documentId: string; totalPages: number; chunkCount: number; ocrPages: number; ocrConfidence: number | null }> {
   onProgress({
     phase: 'opening', currentPage: 0, totalPages: 0, currentBatch: 0, totalBatches: 0,
     message: 'Abrindo e validando o PDF no navegador...',
@@ -74,7 +78,7 @@ export async function processPdfInBrowser(
   }
   const totalBatches = Math.ceil(totalPages / PAGE_BATCH_SIZE);
 
-  const session = await requestJson<{ documentId: string; reused?: boolean; ocrPages?: number; chunkCount?: number }>('/api/pdf-processing/session', {
+  const session = await requestJson<{ documentId: string; reused?: boolean; ocrPages?: number; chunkCount?: number; processedBatches?: number; maxOcrPages?: number; ocrConfidence?: number | null }>('/api/pdf-processing/session', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -89,17 +93,20 @@ export async function processPdfInBrowser(
   if (session.reused) {
     await loadingTask.destroy();
     onProgress({ phase: 'finalizing', currentPage: totalPages, totalPages, currentBatch: totalBatches, totalBatches, message: 'Material encontrado na biblioteca. Reutilizando o processamento existente...' });
-    return { documentId: session.documentId, totalPages, chunkCount: session.chunkCount || 0, ocrPages: session.ocrPages || 0 };
+    return { documentId: session.documentId, totalPages, chunkCount: session.chunkCount || 0, ocrPages: session.ocrPages || 0, ocrConfidence: session.ocrConfidence ?? null };
   }
 
   let documentId = session.documentId;
-  let ocrWorker: { recognize(image: HTMLCanvasElement): Promise<{ data: { text: string } }>; terminate(): Promise<unknown> } | null = null;
-  let ocrPages = 0;
+  const language = options.ocrLanguage || 'por';
+  let ocrWorker: { recognize(image: HTMLCanvasElement): Promise<{ data: { text: string; confidence?: number } }>; terminate(): Promise<unknown> } | null = null;
+  let ocrPages = session.ocrPages || 0;
+  const ocrConfidences: number[] = session.ocrConfidence === null || session.ocrConfidence === undefined ? [] : Array(ocrPages).fill(session.ocrConfidence);
+  const maxOcrPages = session.maxOcrPages || 40;
   try {
-    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex += 1) {
+    for (let batchIndex = session.processedBatches || 0; batchIndex < totalBatches; batchIndex += 1) {
       const pageStart = batchIndex * PAGE_BATCH_SIZE + 1;
       const pageEnd = Math.min(totalPages, pageStart + PAGE_BATCH_SIZE - 1);
-      const pages: Array<{ pageNumber: number; text: string }> = [];
+      const pages: Array<{ pageNumber: number; text: string; ocr?: { confidence: number; language: OcrLanguage; reason: 'empty' | 'partial'; reviewed: boolean } }> = [];
 
       for (let pageNumber = pageStart; pageNumber <= pageEnd; pageNumber += 1) {
         onProgress({
@@ -115,33 +122,48 @@ export async function processPdfInBrowser(
           .replace(/[^\S\n]+/g, ' ')
           .replace(/\n{3,}/g, '\n\n')
           .trim();
-        if (text.length < 40) {
+        const assessment = shouldUseOcrForPage({ text, textItems: textContent.items.length });
+        let ocrMetadata: { confidence: number; language: OcrLanguage; reason: 'empty' | 'partial'; reviewed: boolean } | undefined;
+        if (assessment.required) {
           if (options.allowOcr === false) {
             throw new Error('Este PDF precisa de OCR, recurso disponível no plano Pro. Envie um PDF com texto selecionável ou faça upgrade.');
           }
           onProgress({
             phase: 'ocr', currentPage: pageNumber, totalPages,
             currentBatch: batchIndex + 1, totalBatches,
-            message: `Aplicando OCR na página digitalizada ${pageNumber} de ${totalPages}...`,
+            message: `Aplicando OCR na página ${assessment.reason === 'partial' ? 'parcialmente digitalizada' : 'digitalizada'} ${pageNumber} de ${totalPages}...`,
+            ocrReason: assessment.reason || 'empty',
           });
-          const viewport = page.getViewport({ scale: 1.75 });
+          if (ocrPages >= maxOcrPages) throw new Error(`Este material ultrapassa o limite de ${maxOcrPages} páginas OCR por geração. Divida o PDF ou use um arquivo com texto selecionável.`);
+          const viewport = page.getViewport({ scale: 2.1 });
           const canvas = document.createElement('canvas');
           canvas.width = Math.ceil(viewport.width);
           canvas.height = Math.ceil(viewport.height);
           const canvasContext = canvas.getContext('2d', { alpha: false });
           if (!canvasContext) throw new Error('Não foi possível preparar a página para OCR.');
           await page.render({ canvas, canvasContext, viewport }).promise;
+          improveCanvasForOcr(canvasContext, canvas.width, canvas.height);
           if (!ocrWorker) {
             const { createWorker } = await import('tesseract.js');
-            ocrWorker = await createWorker('por');
+            ocrWorker = await createWorker(language);
           }
           const recognized = await ocrWorker.recognize(canvas);
           text = recognized.data.text.replace(/[^\S\n]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+          const confidence = normalizeOcrConfidence(recognized.data.confidence);
+          let reviewed = false;
+          if (options.reviewOcrPage) {
+            const review = await options.reviewOcrPage({ pageNumber, text, confidence, reason: assessment.reason || 'empty' });
+            text = review.text.trim();
+            reviewed = review.reviewed;
+          }
+          ocrMetadata = { confidence, language, reason: assessment.reason || 'empty', reviewed };
+          ocrConfidences.push(confidence);
           ocrPages += 1;
+          onProgress({ phase: 'ocr', currentPage: pageNumber, totalPages, currentBatch: batchIndex + 1, totalBatches, message: `OCR concluído na página ${pageNumber} com ${confidence}% de confiança.`, ocrConfidence: confidence, ocrReason: assessment.reason || 'empty' });
           canvas.width = 1;
           canvas.height = 1;
         }
-        pages.push({ pageNumber, text });
+        pages.push({ pageNumber, text, ...(ocrMetadata ? { ocr: ocrMetadata } : {}) });
         page.cleanup();
       }
 
@@ -165,16 +187,50 @@ export async function processPdfInBrowser(
     const completed = await requestJson<{ chunkCount: number }>('/api/pdf-processing/finalize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ documentId, ocrPages }),
+      body: JSON.stringify({ documentId, ocrPages, ocrLanguage: language, ocrConfidence: averageOcrConfidence(ocrConfidences) ?? session.ocrConfidence ?? null }),
     });
     if (ocrWorker) await ocrWorker.terminate();
     await loadingTask.destroy();
-    return { documentId, totalPages, chunkCount: completed.chunkCount, ocrPages };
+    return { documentId, totalPages, chunkCount: completed.chunkCount, ocrPages, ocrConfidence: averageOcrConfidence(ocrConfidences) ?? session.ocrConfidence ?? null };
   } catch (error) {
     if (ocrWorker) await ocrWorker.terminate().catch(() => undefined);
     await loadingTask.destroy().catch(() => undefined);
-    await cleanupPdfProcessing(documentId);
-    documentId = '';
     throw error;
   }
+}
+
+function improveCanvasForOcr(context: CanvasRenderingContext2D, width: number, height: number): void {
+  const image = context.getImageData(0, 0, width, height);
+  const data = image.data;
+  for (let index = 0; index < data.length; index += 4) {
+    const gray = 0.299 * data[index] + 0.587 * data[index + 1] + 0.114 * data[index + 2];
+    const contrasted = Math.max(0, Math.min(255, (gray - 128) * 1.35 + 128));
+    data[index] = contrasted; data[index + 1] = contrasted; data[index + 2] = contrasted;
+  }
+  context.putImageData(image, 0, 0);
+}
+
+const PENDING_PDF_DB = 'avanco-pdf-processing';
+export async function savePendingPdf(file: File, language: OcrLanguage): Promise<void> {
+  if (!('indexedDB' in window)) return;
+  const database = await openPendingDatabase();
+  await new Promise<void>((resolve, reject) => { const transaction = database.transaction('pending', 'readwrite'); transaction.objectStore('pending').put({ id: 'current', file, language, savedAt: Date.now() }); transaction.oncomplete = () => resolve(); transaction.onerror = () => reject(transaction.error); });
+  database.close();
+}
+export async function loadPendingPdf(): Promise<{ file: File; language: OcrLanguage } | null> {
+  if (!('indexedDB' in window)) return null;
+  const database = await openPendingDatabase();
+  const value = await new Promise<{ file: File; language: OcrLanguage; savedAt: number } | undefined>((resolve, reject) => { const request = database.transaction('pending', 'readonly').objectStore('pending').get('current'); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+  database.close();
+  if (!value || Date.now() - value.savedAt > 7 * 24 * 60 * 60 * 1000) return null;
+  return { file: value.file, language: value.language };
+}
+export async function clearPendingPdf(): Promise<void> {
+  if (!('indexedDB' in window)) return;
+  const database = await openPendingDatabase();
+  await new Promise<void>((resolve, reject) => { const transaction = database.transaction('pending', 'readwrite'); transaction.objectStore('pending').delete('current'); transaction.oncomplete = () => resolve(); transaction.onerror = () => reject(transaction.error); });
+  database.close();
+}
+function openPendingDatabase(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => { const request = indexedDB.open(PENDING_PDF_DB, 1); request.onupgradeneeded = () => { if (!request.result.objectStoreNames.contains('pending')) request.result.createObjectStore('pending', { keyPath: 'id' }); }; request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
 }

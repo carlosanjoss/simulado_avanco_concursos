@@ -31,12 +31,23 @@ async function ownedSimulado(request: NextRequest, id: string) {
 
 async function saveQuestion(userId: string, simuladoId: string, questions: Question[], question: Question, action: string) {
   const index = questions.findIndex((item) => item.id === question.id)
+  const previous = questions[index]
   questions[index] = question
-  await prisma.$transaction([
-    prisma.simulado.update({ where: { id: simuladoId }, data: { questoesJson: JSON.stringify(questions), status: 'NAO_INICIADO' } }),
-    prisma.tentativa.deleteMany({ where: { userId, simuladoId, concluidoEm: null } }),
-    prisma.auditLog.create({ data: { userId, action, status: 'SUCCESS', metadata: JSON.stringify({ simuladoId, questionId: question.id }) } }),
-  ])
+  await prisma.$transaction(async (transaction) => {
+    const entry = await transaction.questionBankEntry.upsert({
+      where: { userId_simuladoId_questionId: { userId, simuladoId, questionId: question.id } },
+      create: { userId, simuladoId, questionId: question.id },
+      update: { excludedAt: null },
+    })
+    const latest = await transaction.questionVersion.aggregate({ where: { entryId: entry.id }, _max: { version: true } })
+    const currentVersion = latest._max.version || 0
+    await transaction.simulado.update({ where: { id: simuladoId }, data: { questoesJson: JSON.stringify(questions), status: 'NAO_INICIADO' } })
+    await transaction.tentativa.deleteMany({ where: { userId, simuladoId, concluidoEm: null } })
+    if (currentVersion === 0) await transaction.questionVersion.create({ data: { entryId: entry.id, version: 1, snapshotJson: JSON.stringify(previous), changeType: 'ORIGINAL', changedById: userId } })
+    const nextVersion = currentVersion === 0 ? 2 : currentVersion + 1
+    await transaction.questionVersion.create({ data: { entryId: entry.id, version: nextVersion, snapshotJson: JSON.stringify(question), changeType: action, changedById: userId } })
+    await transaction.auditLog.create({ data: { userId, action, status: 'SUCCESS', metadata: JSON.stringify({ simuladoId, questionId: question.id, version: nextVersion }) } })
+  })
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
@@ -63,7 +74,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const difficulty = ({ FACIL: 'Fácil', MEDIO: 'Médio', AVANCADO: 'Avançado', MISTO: 'Misto' } as const)[owned.simulado.difficultyTarget as 'FACIL' | 'MEDIO' | 'AVANCADO' | 'MISTO'] || 'Misto'
   const prompts = buildQuizPrompts({ context: sourceContext, focusTopics: current.tema, totalQuestions: owned.simulado.totalQuestoes, difficultyTarget: difficulty, batch: { number: current.id, startId: current.id, endId: current.id, previousQuestions: questions.filter((item) => item.id !== current.id).map((item) => item.enunciado) } })
   try {
-    const generated = await generateQuizBatchWithFallback(prompts.systemPrompt, prompts.userPrompt, current.id)
+    const generated = await generateQuizBatchWithFallback(prompts.systemPrompt, prompts.userPrompt, current.id, 1)
     const regenerated: Question = { ...generated.batch.questoes[0], id: current.id, sources }
     await saveQuestion(owned.user.id, id, questions, regenerated, 'REGENERATE_QUESTION')
     return NextResponse.json({ question: regenerated })

@@ -3,8 +3,8 @@ import { z } from 'zod';
 const baseQuestion = {
   id: z.number().int().min(1).max(50),
   tema: z.string().trim().min(2).max(120).default('Conteúdo geral'),
-  enunciado: z.string().trim().min(10),
-  justificativa: z.string().trim().min(10),
+  enunciado: z.string().trim().min(10).max(700),
+  justificativa: z.string().trim().min(10).max(1_000),
   dificuldade: z.enum(['Fácil', 'Médio', 'Avançado']),
   sources: z.array(z.object({
     chunkId: z.string().min(1),
@@ -19,14 +19,25 @@ const baseQuestion = {
 const multipleChoiceSchema = z.object({
   ...baseQuestion,
   tipo: z.literal('multipla_escolha'),
-  opcoes: z.tuple([
-    z.string().regex(/^A\)\s*.+/), z.string().regex(/^B\)\s*.+/),
-    z.string().regex(/^C\)\s*.+/), z.string().regex(/^D\)\s*.+/),
-  ]),
-  resposta_correta: z.enum(['A', 'B', 'C', 'D']),
+  opcoes: z.union([z.tuple([
+    z.string().max(300).regex(/^A\)\s*.+/), z.string().max(300).regex(/^B\)\s*.+/),
+    z.string().max(300).regex(/^C\)\s*.+/), z.string().max(300).regex(/^D\)\s*.+/),
+  ]), z.tuple([
+    z.string().max(300).regex(/^A\)\s*.+/), z.string().max(300).regex(/^B\)\s*.+/),
+    z.string().max(300).regex(/^C\)\s*.+/), z.string().max(300).regex(/^D\)\s*.+/),
+    z.string().max(300).regex(/^E\)\s*.+/),
+  ])]),
+  resposta_correta: z.enum(['A', 'B', 'C', 'D', 'E']),
 });
 
-export const questionSchema = z.discriminatedUnion('tipo', [multipleChoiceSchema]);
+const trueFalseSchema = z.object({
+  ...baseQuestion,
+  tipo: z.literal('certo_errado'),
+  opcoes: z.tuple([z.literal('Certo'), z.literal('Errado')]),
+  resposta_correta: z.enum(['Certo', 'Errado']),
+});
+
+export const questionSchema = z.discriminatedUnion('tipo', [multipleChoiceSchema, trueFalseSchema]);
 
 export const quizSchema = z.object({
   titulo: z.string().trim().min(3).max(160),
@@ -44,7 +55,7 @@ export const quizSchema = z.object({
 
 const quizBatchSchema = z.object({
   titulo: z.string().trim().min(3).max(160),
-  questoes: z.array(questionSchema).length(1),
+  questoes: z.array(questionSchema).min(1).max(5),
 });
 
 function parseJsonObject(content: string): unknown {
@@ -101,17 +112,20 @@ export function parseQuizResponse(content: string) {
   }
 }
 
-export function parseQuizBatchResponse(content: string, startId: number) {
+export function parseQuizBatchResponse(content: string, startId: number, count: number = 1) {
   try {
     const parsed = normalizeQuestionTypes(parseJsonObject(content));
     const result = quizBatchSchema.safeParse(parsed);
     if (!result.success) {
       throw new Error(`INVALID_AI_SCHEMA: ${result.error.issues.map((issue) => issue.message).join('; ')}`);
     }
-    const expectedIds = [startId]; // Only 1 question per batch now
+    if (result.data.questoes.length !== count) {
+      throw new Error(`INVALID_AI_SCHEMA: Array must contain exactly ${count} element(s), got ${result.data.questoes.length}.`);
+    }
+    const expectedIds = Array.from({ length: count }, (_, i) => startId + i);
     const receivedIds = result.data.questoes.map((question) => question.id);
     if (receivedIds.some((id, index) => id !== expectedIds[index])) {
-      throw new Error(`INVALID_AI_SCHEMA: o ID da questão deve ser ${startId}.`);
+      throw new Error(`INVALID_AI_SCHEMA: IDs das questões devem ser sequenciais a partir de ${startId}.`);
     }
     return result.data;
   } catch (error) {

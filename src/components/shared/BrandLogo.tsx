@@ -8,7 +8,7 @@ export function BrandLogo({ light = false, compact = false }: { light?: boolean;
         alt="Avanço Simulados"
         width={420}
         height={140}
-        className={`w-full h-auto object-contain ${light ? 'brightness-0 invert' : ''}`}
+        className={`w-full h-auto object-contain ${light ? 'brightness-0 invert' : 'dark:brightness-0 dark:invert'}`}
         priority
       />
     </span>
